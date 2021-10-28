@@ -1,0 +1,21 @@
+;; shadow-cljs configuration
+{:source-paths
+ ["src/dev"
+  "src/main"
+  "src/test"]
+
+ :dependencies
+ [[org.clojure/clojure "1.10.3"]
+  [org.clojure/clojurescript "1.10.866"]
+  [reagent "0.10.0"]
+  [datascript "1.2.8"]]
+ :dev-http {8080 "public"}
+ :builds
+ {:frontend
+  {:target :browser
+   :modules {:main {:init-fn roamtable.core/init}}}
+  :test
+  {:target    :node-test
+   :output-to "out/node-tests.js"
+   :ns-regexp "-spec$"
+   :autorun   true}}}
