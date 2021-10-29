@@ -1,7 +1,7 @@
 (ns query.roam-native
   (:require [clojure.string :as str]
             [cljs.reader :refer [read-string]]
-            [query.util :refer [branch-clauses]]
+            [query.util :refer [branch-clauses string->md5-hex]]
             [query.errors :refer [throw-error roam-native-error]]))
 
 (defonce roam-native-rule
@@ -146,9 +146,8 @@
       (read-string)))
 
 (defn- filter-query-blocks [query]
-  (let [query-filter '[[?query-ref :node/title "query"]
-                       (not (roam-native ?block ?query-ref))]]
-    (into query query-filter)))
+  (into query '[[?query-ref :node/title "query"]
+                (not [?block :block/refs ?query-ref])]))
 
 (defn- nested-clause? [clause]
   (keyword? (nth clause 0)))
@@ -170,9 +169,11 @@
                                    (resolve-roam-native-query % clause-branch-type)
                                    (let
                                     [ref (str %)
-                                     free-var (-> (str "?" (subs ref 2 (- (count ref) 2)))
-                                                  (str/replace " " "")
-                                                  (symbol))]
+                                     ; A little bird suggested I hash the refs (instead of random var names) for testing and (maybe?) caching
+                                     free-var (->> (subs ref 2 (- (count ref) 2))
+                                                   (string->md5-hex)
+                                                   (str "?")
+                                                   (symbol))]
                                      [(list 'ref-to-eid ref free-var)
                                       (list 'roam-native '?block free-var)]))
                                 query-content)]
@@ -185,7 +186,8 @@
     (-> block-string
         (trim-roam-native-query)
         (parse-query)
-        (resolve-roam-native-query :and))
+        (resolve-roam-native-query :and)
+        (filter-query-blocks))
     (catch :default e (println e))))
 
 (def m-roam-native-query
