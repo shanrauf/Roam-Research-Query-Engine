@@ -1,7 +1,7 @@
 (ns query.roam-native
   (:require [clojure.string :as str]
             [cljs.reader :refer [read-string]]
-            [query.util :refer [branch-clauses string->md5-hex]]
+            [query.util :refer [branch-clauses string->md5-hex parse-roam-dnp-ref wrap-query-in-branch]]
             [query.errors :refer [throw-error roam-native-error]]))
 
 (defonce roam-native-rule
@@ -44,36 +44,6 @@
      (= x "[") (recur xs (inc count) (inc len))
      (= x "]") (recur xs (dec count) (inc len))
      :else (recur xs count (inc len)))))
-
-(defonce months {:January 1
-                 :February 2
-                 :March 3
-                 :April 4
-                 :May 5
-                 :June 6
-                 :July 7
-                 :August 8
-                 :September 9
-                 :October 10
-                 :November 11
-                 :December 12})
-
-(defn- month-str->month-num [str]
-  (months (keyword str)))
-
-(defn- format-date [[month day year]]
-  (str (month-str->month-num month) "/" (str day) "/" (str year)))
-
-(defn- parse-roam-dnp-ref [title]
-  (-> (subs title 2 (- (count title) 2))
-      (str/replace "," "")
-      (str/replace "nd" "")
-      (str/replace "th" "")
-      (str/replace "st" "")
-      (str/replace "rd" "")
-      (str/split " ")
-      (format-date)))
-
 
 (defn- date->datalog [date]
   (let [uid (str/replace (.toLocaleDateString date "en-US") "/" "-")]
@@ -151,14 +121,6 @@
 
 (defn- nested-clause? [clause]
   (keyword? (nth clause 0)))
-
-(defn- wrap-query-in-branch
-  [query current-branch clause-branch-type]
-  (cond (= current-branch clause-branch-type) query
-        (= clause-branch-type :and) (if (= current-branch :or)
-                                      (concat (list 'and) query)
-                                      query)
-        :else (concat (list (symbol clause-branch-type)) query)))
 
 (defn resolve-roam-native-query [query current-branch-type]
   (let [clause-branch-type (nth query 0)
