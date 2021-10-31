@@ -1,14 +1,16 @@
 (ns query.attr.attr-spec
   (:require [cljs.test :refer (deftest is testing)]
             [roam.test-graph :as graph]
-            [query.attr.core :refer [execute-roam-attr-query]]
+            [query.attr.core :refer [execute-roam-attr-query execute-reverse-roam-attr-query]]
             [query.attr.operation :refer [get-operator]]
             [query.attr.value :refer [text-type num-type ref-type]]))
 
-(deftest datomic-attr-spec []
-  (testing "ASDF"))
-
 (deftest roam-attr-spec []
+  (testing "Reverse Roam attributes"
+    [(is (= (execute-reverse-roam-attr-query graph/type-attr graph/task-3)
+            [graph/task-type]))
+     (is (= (execute-reverse-roam-attr-query graph/status-attr graph/task-2)
+            [graph/completed graph/october-28-2021]))])
   (testing "Returns properly whether single/multi-value attributes"
     [(is (= (execute-roam-attr-query graph/type-attr
                                      [[(get-operator :includes)
@@ -18,8 +20,7 @@
                                      [[(get-operator :includes)
                                        [[graph/completed
                                          ref-type]]]])
-            [graph/task-2 graph/task-3]))]
-    (is (= 1 1)))
+            [graph/task-2 graph/task-3]))])
   (testing "Operators filter results properly:"
     (testing "String types"
       [(is (= (execute-roam-attr-query graph/description-attr
