@@ -1,142 +1,10 @@
-(ns query.roam-attribute
+(ns query.attr.core
   (:require [roam.datascript :as rd]
             [clojure.string :as str]
-            [query.util :refer [dnp-title->date-str]]))
-
-(defonce text-type :text-type)
-(defonce num-type :num-type)
-(defonce ref-type :ref-type)
-(defonce roam-ref-regex #"\(\(([^()]+)\)\)|\[\[([^\[\]]+)\]\]")
-(defonce float-regex #"^\d+(\.\d+)?$")
-
-(defn- eid->title [eid]
-  (ffirst (rd/q '[:find ?title
-                  :in $ ?e
-                  :where
-                  [?e :node/title ?title]]
-                eid)))
-
-(defn- attr-value->type [pair]
-  (last pair))
-(defn- attr-value->value [pair]
-  (first pair))
-
-(defn- attr-value->timestamp [attr-val]
-  (->> (attr-value->value attr-val)
-       (eid->title)
-       (dnp-title->date-str)
-       (. js/Date parse)))
-
-(defn parse-attribute-ref-value
-  "The attribute is a ref type if the value ONLY contains references"
-  [original-value value ref]
-  (if (re-find roam-ref-regex value)
-    (parse-attribute-ref-value original-value
-                               (-> (str/replace value roam-ref-regex                                                               "")
-                                   (str/trim))
-                               ref)
-    (if (= "" value)
-      [ref ref-type]
-      [original-value text-type])))
-
-(defn parse-attribute-value [input attr-ref ref]
-  (let [value (str/trim input)]
-    (cond
-      (re-find float-regex value) [(js/parseFloat value)
-                                   num-type]
-      (re-find roam-ref-regex value) (if (= attr-ref ref)
-                                       nil
-                                       (parse-attribute-ref-value value
-                                                                  value
-                                                                  ref))
-      :else [value text-type])))
-
-(defn- equals?
-  "Check equality (including duplicates)"
-  [values input-attr-values]
-  (let [val-count (count values)]
-    (and (= val-count (count input-attr-values))
-         (let [sorted-values (sort (mapv attr-value->value values))
-               sorted-inputs (sort (mapv attr-value->value input-attr-values))]
-           (every? #(= (nth sorted-values %)
-                       (nth sorted-inputs %)) (range 0 val-count))))))
-
-(defn- less-than? [values [input-attr-value]]
-  (if (= (attr-value->type input-attr-value) ref-type)
-    (let [input-date (attr-value->timestamp input-attr-value)
-          date-values (mapv attr-value->timestamp values)]
-      (every? #(< % input-date) date-values))
-    (every? #(< % (attr-value->value input-attr-value))
-            (mapv attr-value->value values))))
-
-(defn- less-than-or-equal? [values [input-attr-value]]
-  (if (= (attr-value->type input-attr-value) ref-type)
-    (let [input-date (attr-value->timestamp input-attr-value)
-          date-values (mapv attr-value->timestamp values)]
-      (every? #(<= % input-date) date-values))
-    (every? #(<= % (attr-value->value input-attr-value)) (mapv attr-value->value values))))
-
-(defn- is-dnp? [values _]
-  (not (boolean (some js/isNaN (mapv attr-value->timestamp values)))))
-
-(defn- includes? [attr-values input-values]
-  (let [values (mapv attr-value->value attr-values)
-        first-input (first input-values)
-        input-type (attr-value->type first-input)
-        input-value (attr-value->value first-input)
-        text-input-regex (->> input-value
-                              (str)
-                              (str/lower-case)
-                              (re-pattern))]
-    (cond (= input-type text-type)
-          (boolean (some #(boolean (re-find text-input-regex
-                                            (str/lower-case %))) values))
-
-          (= input-type num-type)
-          (boolean (some #(= input-value %) values))
-
-          :else (every? #(boolean (some #{(attr-value->value %)}
-                                        values)) input-values))))
-
-(defonce query-operators
-  {:= equals?
-   :!= (fn [values input-values]
-         (not (equals? values input-values)))
-   :< less-than?
-   :> (fn [values input-values]
-        (not (less-than-or-equal? values input-values)))
-   :<= less-than-or-equal?
-   :>= (fn [values input-values]
-         (not (less-than? values input-values)))
-   :is_dnp is-dnp?
-   :includes includes?
-   :contains includes?})
-
-(defn get-operator [op-name]
-  (if (keyword? op-name)
-    (get query-operators op-name)
-    (get query-operators (keyword (str/lower-case op-name)))))
-
-(defn- resolve-operation [attr-ref operation]
-  (let [operator (-> (first (filter (comp #{0} :block/order) operation))
-                     (:block/string)
-                     (str/trim)
-                     (get-operator))
-        input-block (first (filter (comp #{1} :block/order) operator))
-        input-str (str/trim (:block/string input-block))
-        input-values (mapv #(parse-attribute-value input-str attr-ref %)
-                           (:block/refs input-block))]
-    [operator input-values]))
-
-
-(defn values-pass-operation? [attr-values operation]
-  (let [[operator input-values] operation]
-    (try (operator attr-values input-values)
-         (catch :default e (do (println e)
-                               false)))))
-
-(defn passes-operations? [attr-values operations]
-  (every? #(values-pass-operation? attr-values %) operations))
+            [query.attr.value :refer [ref-type parse-attribute-value]]
+            [query.attr.operation :refer [operations->datalog-pred
+                                          resolve-operation
+                                          get-operator]]))
 
 (defonce block-datomic-attrs
   [:attrs/lookup
@@ -160,11 +28,6 @@
   (let [split-str (str/split block-string #" ")]
     (and (= 1 (count split-str))
          (boolean (some #{(extract-datomic-attr block-string)} block-datomic-attrs)))))
-
-(defn- operations->datalog-pred [operations]
-  (fn [values] (if (> (count operations) 0)
-                 (passes-operations? values operations)
-                 true)))
 
 (defn execute-datomic-attr-query [datomic-attr operations]
   (rd/q '[:find [?block ...]

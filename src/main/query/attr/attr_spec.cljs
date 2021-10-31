@@ -1,7 +1,12 @@
-(ns query.roam-attribute-spec
+(ns query.attr.attr-spec
   (:require [cljs.test :refer (deftest is testing)]
             [roam.test-graph :as graph]
-            [query.roam-attribute :refer [text-type num-type ref-type get-operator execute-roam-attr-query]]))
+            [query.attr.core :refer [execute-roam-attr-query]]
+            [query.attr.operation :refer [get-operator]]
+            [query.attr.value :refer [text-type num-type ref-type]]))
+
+(deftest datomic-attr-spec []
+  (testing "ASDF"))
 
 (deftest roam-attr-spec []
   (testing "Returns properly whether single/multi-value attributes"
