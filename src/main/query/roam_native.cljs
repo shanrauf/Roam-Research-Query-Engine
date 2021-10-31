@@ -1,7 +1,7 @@
 (ns query.roam-native
   (:require [clojure.string :as str]
             [cljs.reader :refer [read-string]]
-            [query.util :refer [branch-clauses string->md5-hex parse-roam-dnp-ref wrap-query-in-branch]]
+            [query.util :refer [ref->ref-content branch-clauses string->md5-hex dnp-title->date-str wrap-query-in-branch]]
             [query.errors :refer [throw-error roam-native-error]]))
 
 (defonce roam-native-rule
@@ -59,8 +59,12 @@
                          (into clauses (date->datalog date)))))
 
 (defn- resolve-between-clause [[date1 date2]]
-  (let [d1 (js/Date. (parse-roam-dnp-ref date1))
-        d2 (js/Date. (parse-roam-dnp-ref date2))
+  (let [d1 (-> (ref->ref-content date1)
+               (dnp-title->date-str)
+               (js/Date.))
+        d2 (-> (ref->ref-content date2)
+               (dnp-title->date-str)
+               (js/Date.))
         startDate (if (< d1 d2)
                     d1
                     d2)

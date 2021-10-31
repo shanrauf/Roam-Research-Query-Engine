@@ -6,7 +6,6 @@
 (defn branch? [branch]
   (some #(= branch %) branch-clauses))
 
-
 (defn string->md5-hex
   "String goes in, md5 hex string comes out."
   [s]
@@ -36,8 +35,11 @@
 (defn- format-date [[month day year]]
   (str (month-str->month-num month) "/" (str day) "/" (str year)))
 
-(defn parse-roam-dnp-ref [title]
-  (-> (subs title 2 (- (count title) 2))
+(defn ref->ref-content [ref]
+  (subs ref 2 (- (count ref) 2)))
+
+(defn dnp-title->date-str [title]
+  (-> title
       (str/replace "," "")
       (str/replace "nd" "")
       (str/replace "th" "")
