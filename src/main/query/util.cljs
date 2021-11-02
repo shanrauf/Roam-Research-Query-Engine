@@ -6,16 +6,6 @@
 (defn branch? [branch]
   (some #(= branch %) branch-clauses))
 
-(defn string->md5-hex
-  "String goes in, md5 hex string comes out."
-  [s]
-  {:pre [(string? s)]
-   :post [(string? %)]}
-  (goog.crypt/byteArrayToHex
-   (let [md5 (goog.crypt.Md5.)]
-     (.update md5 (goog.crypt/stringToUtf8ByteArray s))
-     (.digest md5))))
-
 (defonce months {:January 1
                  :February 2
                  :March 3
@@ -56,3 +46,17 @@
                                       (concat (list 'and) query)
                                       query)
         :else (concat (list (symbol clause-branch-type)) query)))
+
+(defn- vec-insert [v idx value]
+  (reduce #(into %1 %2) [] [(subvec v 0 idx) [value] (subvec v idx)]))
+
+(defn add-current-blocks-to-query [current-blocks query]
+  (let [where-idx (.indexOf query :where)
+        new-query (vec-insert query where-idx '?current-blocks)]
+    (if (seq current-blocks)
+      (vec-insert new-query (+ where-idx 2) '[(identity ?current-blocks) [?block ...]])
+      new-query)))
+
+(defn filter-query-blocks [query]
+  (into query '[(not [?query-ref :node/title "query"]
+                     [?block :block/refs ?query-ref])]))

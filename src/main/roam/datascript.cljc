@@ -6,6 +6,7 @@
 (defonce datoms (reduce #(conj %1 (apply d/datom %2)) #{} (roam.test-graph/roam-graph :datoms)))
 (defonce db (d/conn-from-datoms datoms schema))
 
+; TODO: queries won't work without an :in clause for some reason
 (defn- add-db-to-args [args]
   (if (> (count args) 1)
     (into [(first args) @db] (rest args))

@@ -8,7 +8,8 @@
 (defonce num-type :num-type)
 (defonce ref-type :ref-type)
 
-(defonce roam-ref-regex #"\(\(([^()]+)\)\)|\[\[([^\[\]]+)\]\]")
+; #[[Status]] | #Status | [[Status]] | (blockRef)
+(defonce roam-ref-regex #"#\[\[.+\]\]|#[^\s]*|\(\(([^()]+)\)\)|\[\[([^\[\]]+)\]\]")
 (defonce float-regex #"^\d+(\.\d+)?$")
 
 (defn- eid->title [eid]
@@ -34,7 +35,7 @@
   [original-value value ref]
   (if (re-find roam-ref-regex value)
     (parse-attribute-ref-value original-value
-                               (-> (str/replace value roam-ref-regex                                                               "")
+                               (-> (str/replace value roam-ref-regex "")
                                    (str/trim))
                                ref)
     (if (= "" value)

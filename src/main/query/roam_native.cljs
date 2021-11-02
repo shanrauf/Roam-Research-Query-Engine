@@ -1,20 +1,38 @@
 (ns query.roam-native
   (:require [clojure.string :as str]
             [cljs.reader :refer [read-string]]
-            [query.util :refer [ref->ref-content branch-clauses string->md5-hex dnp-title->date-str wrap-query-in-branch]]
-            [query.errors :refer [throw-error roam-native-error]]))
+            [query.util :refer [ref->ref-content
+                                add-current-blocks-to-query
+                                branch-clauses
+                                dnp-title->date-str
+                                filter-query-blocks]]
+            [query.errors :refer [throw-error roam-native-error]]
+            [roam.datascript :as rd]))
 
 (defonce roam-native-rule
   '[(roam-native ?block ?refs)
-    ; Double negation (StackOverflow)
+    ; Double negation
     (not-join [?block ?refs]
               [(identity ?refs) [?ref ...]]
               (not-join [?block ?ref]
                         (or-join [?block ?ref]
                                  [?block :block/refs ?ref]
+                                 [?block :block/parents ?ref]
                                  (and [?block :block/parents ?parents]
-                                      [?parents :block/refs ?ref])
-                                 [?block :block/page ?ref])))])
+                                      [?parents :block/refs ?ref]))))])
+
+(defonce query-rules ['[(ref-to-eid ?ref ?e)
+                        [(str ?ref) ?ref-str]
+                        [(count ?ref-str) ?len]
+                        [(- ?len 2) ?end]
+                        [(subs ?ref-str 2 ?end) ?str]
+                        (or (and [(clojure.string/starts-with? ?ref-str "[[")]
+
+                                 [?e :node/title ?str])
+                            (and [(clojure.string/starts-with? ?ref-str "((")]
+
+                                 [?e :block/uid ?str]))]
+                      roam-native-rule])
 
 (defn roam-native-query? [block-string]
   ; Replace `` if surrounding the block
@@ -32,14 +50,14 @@
       (str/trim (subs query-str 10))
       (str/trim (subs query-str 8)))))
 
-; When you find "[[", then keep going until you hit 0 count, then return how long the ref is.
+; TODO (low priority): will break with unbalanced brackets e.g. [[Page [ ABC]]
 (defn ref-length
+  "Walk through a page ref & return its length"
   ([expr] (ref-length (rest (str/split expr #"")) 0 0))
   ([[x & xs] count len]
    (cond
      (neg? count) [false len]
      (nil? x) [(zero? count) len]
-     ; You hit the end of a page reference
      (and (not (= len 0)) (zero? count)) [true len]
      (= x "[") (recur xs (inc count) (inc len))
      (= x "]") (recur xs (dec count) (inc len))
@@ -49,7 +67,7 @@
   (let [uid (str/replace (.toLocaleDateString date "en-US") "/" "-")]
     [(list 'and
            ['?e :block/uid uid]
-           '(roam-native ?block ?e))]))
+           '[?block :block/refs ?e])]))
 
 (defn date-range->datalog [date end-date clauses]
   (if (> date end-date)
@@ -71,8 +89,9 @@
         endDate (if (> d1 d2)
                   d1
                   d2)]
-    [(concat (list 'or) (date-range->datalog startDate endDate []))]))
+    (date-range->datalog startDate endDate [])))
 
+; TODO (low priority): Breaks when page titles have curly braces e.g. [[Page {A}]]
 (defn- replace-braces-with-brackets [query-str]
   (-> query-str
       (str/replace "{" "[")
@@ -89,72 +108,159 @@
   [s c i]
   (str (subs s 0 i) c (subs s i)))
 
-(defn- refs->strings [query-str start]
+(defn- page-refs->strings [query-str start]
   (let [ref-start (+ start (str/index-of (subs query-str start) "[["))
         substr (subs query-str ref-start)
         [is-balanced len] (ref-length substr)]
     (cond (not (has-page-ref? substr)) query-str
-          is-balanced (refs->strings (-> query-str
-                                         (str-insert "\"" (+ ref-start len))
-                                         (str-insert "\"" ref-start))
-                                     (-> ref-start
-                                         (+ len)
-                                         ; Account for the quotes you added
-                                         (+ 2)))
+          is-balanced (page-refs->strings (-> query-str
+                                              (str-insert "\"" (+ ref-start len))
+                                              (str-insert "\"" ref-start))
+                                          (-> ref-start
+                                              (+ len)
+                                              (+ 2)))
           :else (throw-error roam-native-error query-str))))
 
-; TODO Breaks if a page title has a {curly brace} or unbalanced [brackets]
-;; You can easily fix by consulting :block/refs & pattern matching with each entry's :block/string
-;; but it's a rare edge case and not important rn
+
+(defn- nested-clause? [clause]
+  (keyword? (nth clause 0)))
+
+(defn- ref->eid [ref]
+  (first (rd/q '[:find ?e
+                 :in $ % ?ref
+                 :where
+                 (ref-to-eid ?ref ?e)]
+               query-rules ref)))
+
+(defn- combine-lists [lists]
+  (reduce #(into %1 %2) [] lists))
+
+(defn reduce-query
+  "[:and A [:and B]] -> [:and A B]"
+  [query is-duplicate-clause]
+  (let [clause-branch-type (first query)
+        query-content (rest query)
+        new-clause (if is-duplicate-clause
+                     []
+                     [clause-branch-type])]
+    (into new-clause (combine-lists (mapv #(if (nested-clause? %)
+                                             (cond (= (nth % 0) clause-branch-type)
+                                                   (reduce-query % true)
+
+                                                   (and (= clause-branch-type :or)
+                                                        (= (nth % 0) :not))
+                                                   []
+
+                                                   :else [(reduce-query % false)])
+
+                                             [%]) query-content)))))
+
 (defn parse-query
   "Turn a query string into a list format that read-string can understand.
    
-   e.g. {and: [[ex-A]] [[ex-B]]} -> ['and: '[[ex-A]]' '[[ex-B]]']
+   e.g. {and: [[A]] [[B]]} -> ['and: '[[A]]' '[[B]]']
    "
   [query-str]
   (-> query-str
       (replace-braces-with-brackets)
       (branch-clause->keyword)
-      (refs->strings 0)
+      (page-refs->strings 0)
       #_:clj-kondo/ignore
-      (read-string)))
+      (read-string)
+      (reduce-query false)))
 
-(defn- filter-query-blocks [query]
-  (into query '[[?query-ref :node/title "query"]
-                (not [?block :block/refs ?query-ref])]))
+(defn- roam-native-and [refs]
+  [[(list 'identity refs) '?refs]
+   [(list 'identity refs) '[?ref ...]]
+   '[?block :block/refs ?ref]
+   '(roam-native ?block ?refs)])
 
-(defn- nested-clause? [clause]
-  (keyword? (nth clause 0)))
+(defn- roam-native-not [refs]
+  [[(list 'identity refs) '?refs]
+   '(roam-native ?block ?refs)])
 
 (defn resolve-roam-native-query [query current-branch-type]
   (let [clause-branch-type (nth query 0)
         query-content (subvec query 1)]
-    (if (= clause-branch-type :between)
-      (resolve-between-clause query-content)
-      (let [child-clauses (mapv #(if (nested-clause? %)
-                                   (resolve-roam-native-query % clause-branch-type)
-                                   (let
-                                    [ref (str %)
-                                     ; A little bird suggested I hash the refs (instead of random var names) for testing and (maybe?) caching
-                                     free-var (->> (subs ref 2 (- (count ref) 2))
-                                                   (string->md5-hex)
-                                                   (str "?")
-                                                   (symbol))]
-                                     [(list 'ref-to-eid ref free-var)
-                                      (list 'roam-native '?block free-var)]))
-                                query-content)]
-        (wrap-query-in-branch (reduce #(into %1 %2) [] child-clauses)
-                              current-branch-type
-                              clause-branch-type)))))
+    (cond (= clause-branch-type :between)
+          [(concat (list 'or-join '[?block]) (resolve-between-clause query-content))]
 
-(defn- roam-native-query [block-string]
+          :else (let [nested-clauses (mapv #(resolve-roam-native-query % clause-branch-type) (filter nested-clause? query-content))
+                      refs (-> (map ref->eid (filter #(or (string? %)
+                                                          (list? %)) query-content))
+                               (flatten)
+                               (vec))]
+                  ; todo account for if refs is empty or clause branch = current branch
+                  ; account for if no nested clauses too (or maybe u already do)
+                  (cond (= clause-branch-type :and)
+                        (into (if (seq refs)
+                                (roam-native-and refs)
+                                [])
+                              (combine-lists nested-clauses))
+                        (= clause-branch-type :not)
+                        [(concat (concat (list 'not-join '[?block]) (if (seq refs)
+                                                                      (roam-native-not refs)
+                                                                      (list)))
+                                 (combine-lists nested-clauses))]
+                        (= clause-branch-type :or)
+                        [(concat
+                          (concat (list 'or-join '[?block]) (mapv #(concat (list 'and) (roam-native-and [%])) refs))
+                          (map #(if (seq %)
+                                  (concat (list 'and) %)
+                                  ; A hack to do nothing
+                                  '[(= 1 1)]) nested-clauses))])))))
+
+(defn- roam-native-query->datalog [block-string]
+  (-> block-string
+      (trim-roam-native-query)
+      (parse-query)
+      (resolve-roam-native-query :and)
+      (filter-query-blocks)))
+
+(defn- execute-roam-native-query [current-blocks clauses]
+  (let [query (->> (into '[:find [?block ...]
+                           :in $ %
+                           :where]
+                         clauses)
+                   (add-current-blocks-to-query current-blocks))]
+    (rd/q query
+          query-rules
+          current-blocks)))
+
+(def m-roam-native-query->datalog
+  (memoize roam-native-query->datalog))
+
+(defn roam-native-query [current-blocks block-string]
   (try
-    (-> block-string
-        (trim-roam-native-query)
-        (parse-query)
-        (resolve-roam-native-query :and)
-        (filter-query-blocks))
+    (->> (m-roam-native-query->datalog block-string)
+         (execute-roam-native-query current-blocks))
     (catch :default e (println e))))
 
-(def m-roam-native-query
-  (memoize roam-native-query))
+;; (defn test-func []
+;;   (rd/q '[:find [?block ...]
+;;           :in $ %
+;;           :where
+;;           (or-join [?block]
+;;                    (and [?e :block/uid "10-27-2021"]
+;;                         ;; [(identity [?e]) ?e]
+;;                         [?block :block/refs ?e]
+;;                         ;; (roam-native ?block ?e)
+;;                         )
+;;                    (and [?e :block/uid "10-28-2021"]
+;;                         ;; [(identity [?e]) ?e]
+;;                         [?block :block/refs ?e]
+;;                         ;; (roam-native ?block ?e)
+;;                         ))]
+;;         query-rules))
+(defn test-func []
+  (rd/q '[:find [?block ...]
+          :in $ %
+          :where
+          (or-join
+           [?block]
+           (and [(identity [38]) ?refs]
+                [(identity [38]) [?ref ...]]
+                [?block :block/refs ?ref]
+                (roam-native ?block ?refs))
+           [(= 1 1)])]
+        query-rules))

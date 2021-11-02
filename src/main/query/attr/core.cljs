@@ -8,7 +8,7 @@
             [query.attr.operation :refer [operations->datalog-pred
                                           resolve-operation
                                           get-operator]]
-            [query.util :refer [ref->ref-content]]))
+            [query.util :refer [ref->ref-content add-current-blocks-to-query]]))
 
 (defonce block-datomic-attrs
   {:attrs/lookup :attrs/_lookup
@@ -54,44 +54,43 @@
               [(subs ?v 1) ?v])
           [(?parse-attribute-value ?v ?attribute ?refs) ?v]))])
 
-;; (defn custom-aggregate [values]
-;;   (print values)
-;;   values)
+(defn execute-roam-attr-query [current-blocks attribute operations]
+  (let [operations-pred (operations->datalog-pred operations)
+        query '[:find [?block ...]
+                :in $ ?rules ?attribute ?rdq ?parse-attribute-value ?operations-pred
+                :where
+                [?block :attrs/lookup ?attribute]
+                [(?rdq [:find [?v ...]
+                        :in $ % ?block ?attribute ?parse-attribute-value
+                        :where
+                        (attr-values ?block ?attribute ?parse-attribute-value ?v)]
+                       ?rules ?block ?attribute ?parse-attribute-value)
+                 ?values]
+                [(?operations-pred ?values)]]]
+    (rd/q (add-current-blocks-to-query current-blocks query)
+          [attr-values] attribute rd/q parse-attribute-value operations-pred current-blocks)))
 
-(defn execute-roam-attr-query [attribute operations]
-  (let [operations-pred (operations->datalog-pred operations)]
-    (rd/q '[:find [?block ...]
-            :in $ ?rules ?attribute ?rdq ?parse-attribute-value ?operations-pred
-            :where
-            [?block :attrs/lookup ?attribute]
-            [(?rdq [:find [?v ...]
-                    :in $ % ?block ?attribute ?parse-attribute-value
-                    :where
-                    (attr-values ?block ?attribute ?parse-attribute-value ?v)]
-                   ?rules ?block ?attribute ?parse-attribute-value)
-             ?values]
-            [(?operations-pred ?values)]]
-          [attr-values] attribute rd/q parse-attribute-value operations-pred)))
-
-(defn roam-attr-query [block children]
+(defn roam-attr-query [current-blocks block children]
   (let [refs (block :block/refs)]
     (if (contains? block :block/children)
       (let [attr-ref (first refs)]
-        (execute-roam-attr-query attr-ref
+        (execute-roam-attr-query current-blocks
+                                 attr-ref
                                  [(resolve-operation attr-ref children)]))
       (let [attr-title (first (str/split (block :block/string) #"::"))
             attr-ref (first (filter #(= (% :node/title) attr-title) refs))
             operation [(get-operator :=)
                        [(first (filter #(not= % attr-ref) refs))
                         ref-type]]]
-        (execute-roam-attr-query attr-ref [operation])))))
+        (execute-roam-attr-query current-blocks attr-ref [operation])))))
 
-(defn- execute-block-datomic-query [ref datomic-attr]
-  (rd/q '[:find [?block ...]
-          :in $ ?ref ?datomic-attr
-          :where
-          [?ref ?datomic-attr ?block]]
-        ref datomic-attr))
+(defn- execute-block-datomic-query [current-blocks ref datomic-attr]
+  (let [query '[:find [?block ...]
+                :in $ ?ref ?datomic-attr
+                :where
+                [?ref ?datomic-attr ?block]]]
+    (rd/q (add-current-blocks-to-query current-blocks query)
+          ref datomic-attr current-blocks)))
 
 (defn- ref-datomic-attr-query? [block]
   (let [block-string (str/trim (block :block/string))
@@ -104,24 +103,32 @@
                  (> (count (%2 :node/title)) (count (%1 :node/title))) %2
                  :else %1) nil refs))
 
-(defn- ref-datomic-query [block]
+(defn- ref-datomic-query [current-blocks block]
   ; A hack to ensure we retrieve [[Test [[A]]]] instead of [[A]]
   (let [ref (find-longest-ref (block :block/refs))
         datomic-attr (extract-datomic-attr (block :block/string))]
-    (execute-block-datomic-query ref datomic-attr)))
+    (execute-block-datomic-query current-blocks ref datomic-attr)))
 
-(defn execute-reverse-roam-attr-query [attr-ref input-ref]
-  (->> (rd/q '[:find [?v ...]
-               :in $ ?attr-ref ?input-ref ?parse-attribute-value %
-               :where
-               (attr-values ?input-ref ?attr-ref ?parse-attribute-value ?v)]
-             attr-ref input-ref parse-attribute-value [attr-values])
-       (reduce #(if (= (attr-value->type %2) ref-type)
-                  (conj %1 (attr-value->value %2))
-                  %1)
-               [])))
+(defn execute-reverse-roam-attr-query [current-blocks attr-ref input-ref]
+  (let [results (->>
+                 (rd/q '[:find [?block ...]
+                         :in $ ?attr-ref ?input-ref ?parse-attribute-value %
+                         :where
+                         (attr-values ?input-ref ?attr-ref ?parse-attribute-value ?block)]
+                       attr-ref
+                       input-ref
+                       parse-attribute-value
+                       [attr-values])
+                 (reduce #(if (= (attr-value->type %2) ref-type)
+                            (conj %1 (attr-value->value %2))
+                            %1)
+                         []))
+        blocks-set (set current-blocks)]
+    (if (seq current-blocks)
+      (vec (filter #(contains? blocks-set %) results))
+      results)))
 
-(defn- reverse-roam-attr-query [block]
+(defn- reverse-roam-attr-query [current-blocks block]
   (let [attr-title (-> block
                        (:block/string)
                        (str/split #" ")
@@ -132,7 +139,7 @@
         block-refs (block :block/refs)
         attr-ref (first (filter #(= (% :node/title) attr-title) block-refs))
         input-ref (filter #(not= attr-ref %) block-refs)]
-    (execute-reverse-roam-attr-query attr-ref input-ref)))
+    (execute-reverse-roam-attr-query current-blocks attr-ref input-ref)))
 
 (defn- roam-attr-query? [block-string]
   (str/includes? block-string "::"))
@@ -146,11 +153,8 @@
     (or (roam-attr-query? block-string)
         (ref-datomic-attr-query? block))))
 
-(defn attr-query [block children]
-  (let [block-string (str/trim (block :block/string))]
-    (cond (roam-attr-query? block-string) (roam-attr-query block children)
-          (reverse-roam-attr-query? block-string) (reverse-roam-attr-query block)
-          (ref-datomic-attr-query? block) (ref-datomic-query block))))
-
-(def m-attr-query
-  (memoize attr-query))
+(defn attr-query [current-blocks clause-block clause-children]
+  (let [block-string (str/trim (clause-block :block/string))]
+    (cond (roam-attr-query? block-string) (roam-attr-query current-blocks clause-block clause-children)
+          (reverse-roam-attr-query? block-string) (reverse-roam-attr-query current-blocks clause-block)
+          (ref-datomic-attr-query? clause-block) (ref-datomic-query current-blocks clause-block))))
