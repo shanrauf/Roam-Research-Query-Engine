@@ -1,9 +1,14 @@
 (ns roamtable.query
-  (:require [roam.datascript :as rd]
-            [clojure.string :as str]))
+  (:require [clojure.string :as str]
+            [clojure.set]
+            [roam.datascript :as rd]))
 
 ; YOUR CODE HERE...
 
 (defn main [{:keys [block-uid]} & args]
-
+  (println "{{roam/render: ((" block-uid "))}}")
+  (println "Args: " args)
+  (println (. js/Date now))
+  (println "TEST")
+  (println (. js/Date now))
   [:div "HERE"])

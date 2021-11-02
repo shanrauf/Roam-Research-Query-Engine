@@ -13,7 +13,6 @@
 (defonce float-regex #"^\d+(\.\d+)?$")
 
 (defn- eid->title [eid]
-  (println eid)
   (ffirst (rd/q '[:find ?title
                   :in $ ?e
                   :where

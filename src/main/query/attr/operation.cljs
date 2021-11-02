@@ -81,18 +81,16 @@
                      (str/trim)
                      (remove-backticks)
                      (get-operator))
-        input-block (first (filter (comp #{1} :block/order) operator))
+        input-block (first (filter (comp #{1} :block/order) operation))
         input-str (str/trim (:block/string input-block))
-        input-values (mapv #(parse-attribute-value input-str attr-ref %)
+        input-values (mapv #(parse-attribute-value input-str attr-ref (:db/id %))
                            (:block/refs input-block))]
     [operator input-values]))
 
 
 (defn- values-pass-operation? [attr-values operation]
   (let [[operator input-values] operation]
-    (try (operator attr-values input-values)
-         (catch :default e (do (println e)
-                               false)))))
+    (operator attr-values input-values)))
 
 (defn passes-operations? [attr-values operations]
   (every? #(values-pass-operation? attr-values %) operations))

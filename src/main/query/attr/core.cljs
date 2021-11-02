@@ -75,16 +75,16 @@
 
 (defn roam-attr-query [current-blocks block children]
   (let [refs (block :block/refs)]
-    (if (contains? block :block/children)
-      (let [attr-ref (first refs)]
+    (if (seq children)
+      (let [attr-ref (:db/id (first refs))]
         (execute-roam-attr-query current-blocks
                                  attr-ref
                                  [(resolve-operation attr-ref children)]))
       (let [attr-title (first (str/split (block :block/string) #"::"))
-            attr-ref (first (filter #(= (% :node/title) attr-title) refs))
+            attr-ref (:db/id (first (filter #(= (% :node/title) attr-title) refs)))
             operation [(get-operator :=)
-                       [(first (filter #(not= % attr-ref) refs))
-                        ref-type]]]
+                       [[(:db/id (first (filter #(not= % attr-ref) refs)))
+                         ref-type]]]]
         (execute-roam-attr-query current-blocks attr-ref [operation])))))
 
 (defn- execute-block-datomic-query [current-blocks ref datomic-attr]

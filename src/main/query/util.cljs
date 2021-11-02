@@ -1,6 +1,5 @@
 (ns query.util
-  (:require goog.crypt goog.crypt.Md5
-            [clojure.string :as str]))
+  (:require [clojure.string :as str]))
 
 (defonce branch-clauses ["and" "or" "not" "between"])
 (defn branch? [branch]
@@ -29,7 +28,6 @@
   (subs ref 2 (- (count ref) 2)))
 
 (defn dnp-title->date-str [title]
-  (println title)
   (-> title
       (str/replace "," "")
       (str/replace "nd" "")
@@ -42,8 +40,17 @@
 (defn- vec-insert [v idx value]
   (reduce #(into %1 %2) [] [(subvec v 0 idx) [value] (subvec v idx)]))
 
+(defn- index-of
+  "ClojureScript replacement for .indexOf, which won't work in {{roam/render}}"
+  [s v]
+  (loop [idx 0 items s]
+    (cond
+      (empty? items) nil
+      (= v (first items)) idx
+      :else (recur (inc idx) (rest items)))))
+
 (defn add-current-blocks-to-query [current-blocks query]
-  (let [where-idx (.indexOf query :where)
+  (let [where-idx (index-of query :where)
         new-query (vec-insert query where-idx '?current-blocks)]
     (if (seq current-blocks)
       (vec-insert new-query (+ where-idx 2) '[(identity ?current-blocks) [?block ...]])

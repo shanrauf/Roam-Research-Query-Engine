@@ -241,7 +241,5 @@
   (memoize roam-native-query->datalog))
 
 (defn roam-native-query [current-blocks block-string]
-  (try
-    (->> (m-roam-native-query->datalog block-string)
-         (execute-roam-native-query current-blocks))
-    (catch :default e (println e))))
+  (->> (m-roam-native-query->datalog block-string)
+       (execute-roam-native-query current-blocks)))
