@@ -8,7 +8,9 @@
             [query.attr.operation :refer [operations->datalog-pred
                                           resolve-operation
                                           get-operator]]
-            [query.util :refer [ref->ref-content add-current-blocks-to-query]]))
+            [query.util :refer [ref->ref-content
+                                filter-query-blocks
+                                add-current-blocks-to-query]]))
 
 (defonce block-datomic-attrs
   {:attrs/lookup :attrs/_lookup
@@ -28,7 +30,7 @@
     [?block :attrs/lookup ?l]
     (or-join
      [?l ?attribute ?v ?parse-attribute-value]
-                     ; Multi-value attribute
+     ; Multi-value attribute
      (and [?l :block/parents ?parent]
           [?parent :block/refs ?attribute]
           [?parent :block/children ?l]
@@ -36,12 +38,12 @@
           (not [(re-matches #"^\s*$" ?v)])
           [(get-else $ ?l :block/refs []) ?refs]
           [(?parse-attribute-value ?v ?attribute ?refs) ?v])
-                     ; One-liner attribute
+     ; One-liner attribute
      (and [?l :block/refs ?attribute]
           [?l :block/refs ?refs]
           [?l :block/string ?v]
 
-                          ; Hacky parsing to isolate value
+          ; Hacky parsing to isolate value
           [?attribute :node/title ?attr-title]
           [?l :block/string ?str]
           [(str ?attr-title "::") ?roam-attr]
@@ -56,17 +58,18 @@
 
 (defn execute-roam-attr-query [current-blocks attribute operations]
   (let [operations-pred (operations->datalog-pred operations)
-        query '[:find [?block ...]
-                :in $ ?rules ?attribute ?rdq ?parse-attribute-value ?operations-pred
-                :where
-                [?block :attrs/lookup ?attribute]
-                [(?rdq [:find [?v ...]
-                        :in $ % ?block ?attribute ?parse-attribute-value
-                        :where
-                        (attr-values ?block ?attribute ?parse-attribute-value ?v)]
-                       ?rules ?block ?attribute ?parse-attribute-value)
-                 ?values]
-                [(?operations-pred ?values)]]]
+        where-clauses '[[?block :attrs/lookup ?attribute]
+                        [(?rdq [:find [?v ...]
+                                :in $ % ?block ?attribute ?parse-attribute-value
+                                :where
+                                (attr-values ?block ?attribute ?parse-attribute-value ?v)]
+                               ?rules ?block ?attribute ?parse-attribute-value)
+                         ?values]
+                        [(?operations-pred ?values)]]
+        query (into '[:find [?block ...]
+                      :in $ ?rules ?attribute ?rdq ?parse-attribute-value ?operations-pred
+                      :where]
+                    (filter-query-blocks where-clauses))]
     (rd/q (add-current-blocks-to-query current-blocks query)
           [attr-values] attribute rd/q parse-attribute-value operations-pred current-blocks)))
 

@@ -1,6 +1,7 @@
 (ns query.errors)
 
 (defonce roam-native-error "#ROAM_NATIVE!")
+(defonce generic-query-error "#GENERIC_QUERY!")
 
 (defonce errors {roam-native-error "Roam native parsing error!"})
 

@@ -1,5 +1,6 @@
 (ns query.attr.operation
   (:require [clojure.string :as str]
+            [query.util :refer [remove-backticks]]
             [query.attr.value :refer [ref-type
                                       num-type
                                       text-type
@@ -78,6 +79,7 @@
   (let [operator (-> (first (filter (comp #{0} :block/order) operation))
                      (:block/string)
                      (str/trim)
+                     (remove-backticks)
                      (get-operator))
         input-block (first (filter (comp #{1} :block/order) operator))
         input-str (str/trim (:block/string input-block))

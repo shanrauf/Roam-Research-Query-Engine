@@ -1,24 +1,32 @@
 (ns query.core
   (:require [clojure.string :as str]
+            [clojure.set]
             [roam.datascript :as rd]
-            [query.roam-attribute :refer [attr-query? m-attr-query]]
-            [query.roam-native :refer [roam-native-query? m-roam-native-query]]
-            [query.util :refer [branch? wrap-query-in-branch]]))
+            [query.errors :refer [throw-error generic-query-error]]
+            [query.util :refer [branch?]]
+            [query.attr.core :refer [attr-query? attr-query]]
+            [query.roam-native :refer [roam-native-query? roam-native-query]]))
 
-(defn parse-generic-query-clause [block, current-branch]
-  (let [block-string (str/trim (block :block/string))
+(defn execute-generic-query-clause [blocks clause-block]
+  (let [block-string (str/trim (clause-block :block/string))
         str-lower (str/lower-case block-string)
-        children (block :block/children)]
-    (cond
-      (branch? str-lower)
-      (let [child-clauses (mapv #(parse-generic-query-clause % str-lower) children)]
-        (wrap-query-in-branch current-branch str-lower child-clauses))
+        children (clause-block :block/children)]
+    (cond (branch? str-lower)
+          (cond (= str-lower "and")
+                (reduce #(execute-generic-query-clause %1 %2) blocks children)
 
-      (roam-native-query? block-string)
-      (m-roam-native-query block-string)
+                (= str-lower "or")
+                (reduce #(clojure.set/union (set %1) (set (execute-generic-query-clause blocks %2))) blocks children)
 
-      (attr-query? block)
-      (m-attr-query block children))))
+                (= str-lower "not")
+                (clojure.set/difference blocks (reduce #(execute-generic-query-clause %1 %2) blocks children))
+
+                :else (throw-error generic-query-error str-lower))
+          (attr-query? block-string)
+          (attr-query blocks clause-block children)
+
+          (roam-native-query? block-string)
+          (roam-native-query blocks block-string))))
 
 (defn- get-block-children [uid]
   (nth (rd/q '[:find (pull ?children [:db/id :block/order :block/uid :node/title :block/string {:block/refs 2} {:block/children ...}])
@@ -29,8 +37,15 @@
              uid)
        0))
 
+(defn- get-all-blocks []
+  (rd/q '[:find ?e
+          :in $ ?nonce
+          :where
+          (or [?e :block/string]
+              [?e :node/title])]
+        0))
+
 (defn generic-roam-query [query-uid]
-  (let [block-children (get-block-children query-uid)
-        query-where-clauses (mapv #(parse-generic-query-clause % "and") block-children)]
-    query-where-clauses))
+  (let [query-tree (first (get-block-children query-uid))]
+    (execute-generic-query-clause [] query-tree)))
 

@@ -13,6 +13,7 @@
 (defonce float-regex #"^\d+(\.\d+)?$")
 
 (defn- eid->title [eid]
+  (println eid)
   (ffirst (rd/q '[:find ?title
                   :in $ ?e
                   :where
@@ -25,10 +26,12 @@
   (first pair))
 
 (defn attr-value->timestamp [attr-val]
-  (->> (attr-value->value attr-val)
-       (eid->title)
-       (dnp-title->date-str)
-       (. js/Date parse)))
+  (let [date-title (eid->title (attr-value->value attr-val))]
+    (if date-title
+      (->> date-title
+           (dnp-title->date-str)
+           (. js/Date parse))
+      nil)))
 
 (defn parse-attribute-ref-value
   "The attribute is a ref type if the value ONLY contains references"

@@ -29,6 +29,7 @@
   (subs ref 2 (- (count ref) 2)))
 
 (defn dnp-title->date-str [title]
+  (println title)
   (-> title
       (str/replace "," "")
       (str/replace "nd" "")
@@ -37,15 +38,6 @@
       (str/replace "rd" "")
       (str/split " ")
       (format-date)))
-
-
-(defn wrap-query-in-branch
-  [query current-branch clause-branch-type]
-  (cond (= current-branch clause-branch-type) query
-        (= clause-branch-type :and) (if (= current-branch :or)
-                                      (concat (list 'and) query)
-                                      query)
-        :else (concat (list (symbol clause-branch-type)) query)))
 
 (defn- vec-insert [v idx value]
   (reduce #(into %1 %2) [] [(subvec v 0 idx) [value] (subvec v idx)]))
@@ -57,6 +49,17 @@
       (vec-insert new-query (+ where-idx 2) '[(identity ?current-blocks) [?block ...]])
       new-query)))
 
-(defn filter-query-blocks [query]
-  (into query '[(not [?query-ref :node/title "query"]
-                     [?block :block/refs ?query-ref])]))
+(defn filter-query-blocks [where-clauses]
+  (into where-clauses '[[?query-ref :node/title "query"]
+                        (not-join [?block ?query-ref]
+                                  (or-join
+                                   [?block ?query-ref]
+                                   [?block :block/refs ?query-ref]
+                                   (and [?block :block/parents ?parents]
+                                        [?parents :block/refs ?query-ref])))]))
+
+(defn remove-backticks [block-string]
+  (if (and (str/starts-with? block-string "`")
+           (str/ends-with? block-string "`"))
+    (subs block-string 1 (- (count block-string) 1))
+    block-string))
