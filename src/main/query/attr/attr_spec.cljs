@@ -1,7 +1,9 @@
 (ns query.attr.attr-spec
   (:require [cljs.test :refer (deftest is testing)]
             [roam.test-graph :as graph]
-            [query.attr.core :refer [execute-roam-attr-query execute-reverse-roam-attr-query]]
+            [query.attr.core :refer [execute-roam-attr-query
+                                     execute-ref-datomic-query
+                                     execute-reverse-roam-attr-query]]
             [query.attr.operation :refer [get-operator]]
             [query.attr.value :refer [text-type num-type ref-type parse-attribute-value]]))
 
@@ -18,8 +20,17 @@
   (testing "Reverse Roam attributes"
     [(is (= (set (execute-reverse-roam-attr-query [] graph/type-attr graph/task-3))
             #{graph/task-type}))
+     (is (= (set (execute-reverse-roam-attr-query [] graph/todos-attr graph/task-1))
+            #{graph/task-2 graph/task-3}))
      (is (= (set (execute-reverse-roam-attr-query [] graph/status-attr graph/task-2))
             #{graph/completed graph/october-28-2021}))])
+  (testing "Ref Datomic attributes"
+    [(is (= (set (execute-ref-datomic-query [] (:db/id graph/test-block-0) :block/children))
+            (set (:block/children graph/test-block-0))))
+     (is (= (set (execute-ref-datomic-query [] (:db/id graph/test-block-1) :block/children))
+            (set (:block/children graph/test-block-1))))
+     (is (= (set (execute-ref-datomic-query [] (:db/id graph/test-block-2) :block/parents))
+            (set (:block/parents graph/test-block-2))))])
   (testing "Returns properly whether single/multi-value attributes"
     [(is (= (set (execute-roam-attr-query []
                                           graph/type-attr

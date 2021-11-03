@@ -70,3 +70,16 @@
            (str/ends-with? block-string "`"))
     (subs block-string 1 (- (count block-string) 1))
     block-string))
+
+; TODO: breaks with unbalanced brackets e.g. [[Page [ ABC]]
+(defn ref-length
+  "Walk through a page ref & return its length"
+  ([expr] (ref-length (rest (str/split expr #"")) 0 0))
+  ([[x & xs] count len]
+   (cond
+     (neg? count) [false len]
+     (nil? x) [(zero? count) len]
+     (and (not (= len 0)) (zero? count)) [true len]
+     (= x "[") (recur xs (inc count) (inc len))
+     (= x "]") (recur xs (dec count) (inc len))
+     :else (recur xs count (inc len)))))

@@ -11,6 +11,7 @@
                                           equality-operation?]]
             [query.util :refer [ref->ref-content
                                 filter-query-blocks
+                                ref-length
                                 add-current-blocks-to-query]]))
 
 (defonce block-datomic-attrs
@@ -67,7 +68,7 @@
 
 (defn execute-roam-attr-query [current-blocks attribute operations input-refs]
   (let [operations-pred (operations->datalog-pred operations)
-        ; This optimization speeds up ref-type =/INCLUDES queries by 1.5x
+        ; This optimization speeds up ref-type =/INCLUDES queries by ~1.5x
         ;; since all ref values are in :attrs/lookup
         lookup-clauses (if (seq input-refs)
                          '[[?block :attrs/lookup ?attribute]
@@ -84,7 +85,7 @@
                      [attr-values] attribute parse-attribute-value identity-aggregate single-value-attr? input-refs current-blocks)]
     (->> blocks
          (filter #(operations-pred (second %)))
-         (map first))))
+         (mapv first))))
 
 (defn- ref-equality-check? [attr-values operation]
   (and (map #(= (attr-value->type %)
@@ -113,13 +114,13 @@
                            (parse-attribute-value attr-ref input-ref))
             operation [(get-operator :=)
                        [attr-value]]
-            is-ref-equality-check (ref-equality-check? attr-value operation)]
-        ;; (println operation)
-        (execute-roam-attr-query current-blocks attr-ref [operation] (if is-ref-equality-check
-                                                                       [input-ref]
-                                                                       nil))))))
+            is-ref-equality-check (ref-equality-check? attr-value operation)
+            input-refs (if is-ref-equality-check
+                         [input-ref]
+                         nil)]
+        (execute-roam-attr-query current-blocks attr-ref [operation] input-refs)))))
 
-(defn- execute-block-datomic-query [current-blocks ref datomic-attr]
+(defn execute-ref-datomic-query [current-blocks ref datomic-attr]
   (let [query '[:find [?block ...]
                 :in $ ?ref ?datomic-attr
                 :where
@@ -131,7 +132,8 @@
   (let [block-string (str/trim (block :block/string))
         split-str (str/split block-string #" ")]
     (and (>= 1 (count (block :block/refs)))
-         (boolean (some #{(keyword (subs (last split-str) 1))} block-datomic-attrs)))))
+         (boolean (contains? block-datomic-attrs
+                             (keyword (subs (last split-str) 1)))))))
 
 (defn- find-longest-ref [refs]
   (reduce #(cond (= %1 nil) %1
@@ -142,7 +144,7 @@
   ; A hack to ensure we retrieve [[Test [[A]]]] instead of [[A]]
   (let [ref (find-longest-ref (block :block/refs))
         datomic-attr (extract-datomic-attr (block :block/string))]
-    (execute-block-datomic-query current-blocks ref datomic-attr)))
+    (execute-ref-datomic-query current-blocks ref datomic-attr)))
 
 (defn execute-reverse-roam-attr-query [current-blocks attr-ref input-ref]
   (let [results (->>
@@ -165,16 +167,18 @@
       results)))
 
 (defn- reverse-roam-attr-query [current-blocks block]
-  (let [attr-title (-> block
-                       (:block/string)
-                       (str/split #" ")
-                       (first)
-                       (str/trim)
-                       (subs 1)
+  (let [block-string (-> block
+                         (:block/string)
+                         (str/trim))
+        [_ attr-ref-len] (-> block-string
+                             (subs 1)
+                             (ref-length))
+        attr-title (-> block-string
+                       (subs 1 (+ 1 attr-ref-len))
                        (ref->ref-content))
         block-refs (block :block/refs)
-        attr-ref (first (filter #(= (% :node/title) attr-title) block-refs))
-        input-ref (filter #(not= attr-ref %) block-refs)]
+        attr-ref (:db/id (first (filter #(= (% :node/title) attr-title) block-refs)))
+        input-ref (first (filter #(not= attr-ref %) (map :db/id block-refs)))]
     (execute-reverse-roam-attr-query current-blocks attr-ref input-ref)))
 
 (defn- roam-attr-query? [block-string]
@@ -185,8 +189,8 @@
 
 (defn attr-query? [block]
   (let [block-string (str/trim (block :block/string))]
-
     (or (roam-attr-query? block-string)
+        (reverse-roam-attr-query? block-string)
         (ref-datomic-attr-query? block))))
 
 (defn attr-query [current-blocks clause-block clause-children]

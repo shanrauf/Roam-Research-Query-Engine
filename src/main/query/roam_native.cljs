@@ -5,6 +5,7 @@
                                 remove-backticks
                                 add-current-blocks-to-query
                                 branch-clauses
+                                ref-length
                                 dnp-title->date-str
                                 filter-query-blocks]]
             [query.errors :refer [throw-error roam-native-error]]
@@ -48,19 +49,6 @@
     (if (str/starts-with? query "[[")
       (str/trim (subs query 10))
       (str/trim (subs query 8)))))
-
-; TODO: breaks with unbalanced brackets e.g. [[Page [ ABC]]
-(defn ref-length
-  "Walk through a page ref & return its length"
-  ([expr] (ref-length (rest (str/split expr #"")) 0 0))
-  ([[x & xs] count len]
-   (cond
-     (neg? count) [false len]
-     (nil? x) [(zero? count) len]
-     (and (not (= len 0)) (zero? count)) [true len]
-     (= x "[") (recur xs (inc count) (inc len))
-     (= x "]") (recur xs (dec count) (inc len))
-     :else (recur xs count (inc len)))))
 
 (defn- date->datalog [date]
   (let [uid (str/replace (.toLocaleDateString date "en-US") "/" "-")]
