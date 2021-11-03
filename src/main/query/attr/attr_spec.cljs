@@ -7,6 +7,10 @@
 
 
 (deftest roam-attr-spec []
+  ;; (println (execute-roam-attr-query []
+  ;;                                   graph/type-attr
+  ;;                                   [[(get-operator :=)
+  ;;                                     [[graph/task-type ref-type]]]]))
   (testing "Attribute value parsing:"
     (testing "Ref type"
       [(is (= (parse-attribute-value "[[Status]]" graph/type-attr graph/status-attr)
@@ -31,7 +35,23 @@
                                           [[(get-operator :includes)
                                             [[graph/completed
                                               ref-type]]]]))
-            #{graph/task-2 graph/task-3}))])
+            #{graph/task-2 graph/task-3}))
+     (is (= (set (execute-roam-attr-query []
+                                          graph/todos-attr
+                                          [[(get-operator :includes)
+                                            [[graph/task-2
+                                              ref-type]
+                                             [graph/task-3
+                                              ref-type]]]]))
+            #{graph/task-1}))
+     (is (= (set (execute-roam-attr-query []
+                                          graph/todos-attr
+                                          [[(get-operator :=)
+                                            [[graph/task-2
+                                              ref-type]
+                                             [graph/task-3
+                                              ref-type]]]]))
+            #{graph/task-1}))])
   (testing "Operators filter results properly:"
     (testing "String types"
       [(is (= (set (execute-roam-attr-query []

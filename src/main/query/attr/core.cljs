@@ -28,21 +28,13 @@
 (defonce attr-values
   '[(attr-values ?block ?attribute ?parse-attribute-value ?v)
     [?block :attrs/lookup ?l]
+    [?l :block/refs ?attribute]
     (or-join
      [?l ?attribute ?v ?parse-attribute-value]
-     ; Multi-value attribute
-     (and [?l :block/parents ?parent]
-          [?parent :block/refs ?attribute]
-          [?parent :block/children ?l]
-          [?l :block/string ?v]
-          (not [(re-matches #"^\s*$" ?v)])
-          [(get-else $ ?l :block/refs []) ?refs]
-          [(?parse-attribute-value ?v ?attribute ?refs) ?v])
      ; One-liner attribute
-     (and [?l :block/refs ?attribute]
+     (and [(missing? $ ?l :block/children)]
           [?l :block/refs ?refs]
           [?l :block/string ?v]
-
           ; Hacky parsing to isolate value
           [?attribute :node/title ?attr-title]
           [?l :block/string ?str]
@@ -54,24 +46,31 @@
           [(subs ?v 0 1) ?first-char]
           (or [(!= ?first-char " ")]
               [(subs ?v 1) ?v])
+          [(?parse-attribute-value ?v ?attribute ?refs) ?v])
+     ; Multi-value attribute
+     (and (not [(missing? $ ?l :block/children)])
+          [?l :block/children ?children]
+          [?children :block/string ?v]
+          (not [(re-matches #"^\s*$" ?v)])
+          [(get-else $ ?children :block/refs []) ?refs]
           [(?parse-attribute-value ?v ?attribute ?refs) ?v]))])
+
+(defn- identity-aggregate [values]
+  values)
 
 (defn execute-roam-attr-query [current-blocks attribute operations]
   (let [operations-pred (operations->datalog-pred operations)
         where-clauses '[[?block :attrs/lookup ?attribute]
-                        [(?rdq [:find [?v ...]
-                                :in $ % ?block ?attribute ?parse-attribute-value
-                                :where
-                                (attr-values ?block ?attribute ?parse-attribute-value ?v)]
-                               ?rules ?block ?attribute ?parse-attribute-value)
-                         ?values]
-                        [(?operations-pred ?values)]]
-        query (into '[:find [?block ...]
-                      :in $ ?rules ?attribute ?rdq ?parse-attribute-value ?operations-pred
+                        (attr-values ?block ?attribute ?parse-attribute-value ?v)]
+        query (into '[:find ?block (aggregate ?aggr ?v)
+                      :in $ % ?attribute ?parse-attribute-value ?aggr
                       :where]
-                    (filter-query-blocks where-clauses))]
-    (rd/q (add-current-blocks-to-query current-blocks query)
-          [attr-values] attribute rd/q parse-attribute-value operations-pred current-blocks)))
+                    (filter-query-blocks where-clauses))
+        blocks (rd/q (add-current-blocks-to-query current-blocks query)
+                     [attr-values] attribute parse-attribute-value identity-aggregate current-blocks)]
+    (->> blocks
+         (filter #(operations-pred (second %)))
+         (map first))))
 
 (defn roam-attr-query [current-blocks block children]
   (let [refs (block :block/refs)]
