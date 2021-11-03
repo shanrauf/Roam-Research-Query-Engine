@@ -14,7 +14,7 @@
   '[(roam-native ?block ?refs)
     ; Double negation
     (not-join [?block ?refs]
-              [(identity ?refs) [?ref ...]]
+              [(ground ?refs) [?ref ...]]
               (not-join [?block ?ref]
                         (or-join [?block ?ref]
                                  [?block :block/refs ?ref]

@@ -56,6 +56,11 @@
           :else (every? #(boolean (some #{(attr-value->value %)}
                                         values)) input-values))))
 
+(defn equality-operation? [operation]
+  (let [op (first operation)]
+    (or (= op equals?)
+        (= op includes?))))
+
 (defonce query-operators
   {:= equals?
    :!= (fn [values input-values]

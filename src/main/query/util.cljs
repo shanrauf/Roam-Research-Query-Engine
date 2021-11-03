@@ -53,7 +53,7 @@
   (let [where-idx (index-of query :where)
         new-query (vec-insert query where-idx '?current-blocks)]
     (if (seq current-blocks)
-      (vec-insert new-query (+ where-idx 2) '[(identity ?current-blocks) [?block ...]])
+      (vec-insert new-query (+ where-idx 2) '[(ground ?current-blocks) [?block ...]])
       new-query)))
 
 (defn filter-query-blocks [where-clauses]

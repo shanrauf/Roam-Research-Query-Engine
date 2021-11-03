@@ -7,10 +7,6 @@
 
 
 (deftest roam-attr-spec []
-  ;; (println (execute-roam-attr-query []
-  ;;                                   graph/type-attr
-  ;;                                   [[(get-operator :=)
-  ;;                                     [[graph/task-type ref-type]]]]))
   (testing "Attribute value parsing:"
     (testing "Ref type"
       [(is (= (parse-attribute-value "[[Status]]" graph/type-attr graph/status-attr)
@@ -28,13 +24,15 @@
     [(is (= (set (execute-roam-attr-query []
                                           graph/type-attr
                                           [[(get-operator :includes)
-                                            [[graph/task-type ref-type]]]]))
+                                            [[graph/task-type ref-type]]]]
+                                          [graph/task-type]))
             #{graph/task-1 graph/task-2 graph/task-3}))
      (is (= (set (execute-roam-attr-query []
                                           graph/status-attr
                                           [[(get-operator :includes)
                                             [[graph/completed
-                                              ref-type]]]]))
+                                              ref-type]]]]
+                                          [graph/completed]))
             #{graph/task-2 graph/task-3}))
      (is (= (set (execute-roam-attr-query []
                                           graph/todos-attr
@@ -42,7 +40,8 @@
                                             [[graph/task-2
                                               ref-type]
                                              [graph/task-3
-                                              ref-type]]]]))
+                                              ref-type]]]]
+                                          [graph/task-2 graph/task-3]))
             #{graph/task-1}))
      (is (= (set (execute-roam-attr-query []
                                           graph/todos-attr
@@ -50,95 +49,113 @@
                                             [[graph/task-2
                                               ref-type]
                                              [graph/task-3
-                                              ref-type]]]]))
+                                              ref-type]]]]
+                                          [graph/task-2 graph/task-3]))
             #{graph/task-1}))])
   (testing "Operators filter results properly:"
     (testing "String types"
       [(is (= (set (execute-roam-attr-query []
                                             graph/description-attr
                                             [[(get-operator :includes)
-                                              [["task 1" text-type]]]]))
+                                              [["task 1" text-type]]]]
+                                            nil))
               #{graph/task-1}))
        (is (= (set (execute-roam-attr-query []
                                             graph/description-attr
                                             [[(get-operator :includes)
-                                              [["task 2" text-type]]]]))
+                                              [["task 2" text-type]]]]
+                                            nil))
               #{graph/task-2}))
        (is (= (set (execute-roam-attr-query []
                                             graph/description-attr
                                             [[(get-operator :=)
-                                              [["This is task 1" text-type]]]]))
+                                              [["This is task 1" text-type]]]]
+                                            nil))
               #{graph/task-1}))])
     (testing "Number types"
       [(is (= (set (execute-roam-attr-query []
                                             graph/priority-attr
                                             [[(get-operator :includes)
-                                              [[1 num-type]]]]))
+                                              [[1 num-type]]]]
+                                            nil))
               #{graph/task-1}))
        (is (= (set (execute-roam-attr-query []
                                             graph/priority-attr
                                             [[(get-operator :=)
-                                              [[2 num-type]]]]))
+                                              [[2 num-type]]]]
+                                            nil))
               #{graph/task-2}))
        (is (= (set (execute-roam-attr-query []
                                             graph/priority-attr
                                             [[(get-operator :>)
-                                              [[2 num-type]]]]))
+                                              [[2 num-type]]]]
+                                            nil))
               #{graph/task-3}))
        (is (= (set (execute-roam-attr-query []
                                             graph/priority-attr
                                             [[(get-operator :<)
-                                              [[2 num-type]]]]))
+                                              [[2 num-type]]]]
+                                            nil))
               #{graph/task-1}))
        (is (= (set (execute-roam-attr-query []
                                             graph/priority-attr
                                             [[(get-operator :includes)
-                                              [[2 num-type]]]]))
+                                              [[2 num-type]]]]
+                                            nil))
               #{graph/task-2 graph/task-3}))
        (is (= (set (execute-roam-attr-query []
                                             graph/priority-attr
                                             [[(get-operator :includes)
-                                              [[3 num-type]]]]))
+                                              [[3 num-type]]]]
+                                            nil))
               #{graph/task-3}))])
     (testing "Ref types"
       [(is (= (set (execute-roam-attr-query []
                                             graph/status-attr
                                             [[(get-operator :=)
-                                              [[graph/in-progress ref-type]]]]))
+                                              [[graph/in-progress ref-type]]]]
+                                            [graph/in-progress]))
               #{graph/task-1}))
        (is (= (set (execute-roam-attr-query []
                                             graph/status-attr
                                             [[(get-operator :=)
-                                              [[graph/completed ref-type]]]]))
+                                              [[graph/completed ref-type]]]]
+                                            [graph/completed]))
               #{}))])
     (testing "Date ref types"
       [(is (= (set (execute-roam-attr-query []
                                             graph/deadline-attr
                                             [[(get-operator :is_dnp)
-                                              []]]))
+                                              []]]
+                                            nil))
               #{graph/task-1 graph/task-2}))
        (is (= (set (execute-roam-attr-query []
                                             graph/deadline-attr
                                             [[(get-operator :<)
-                                              [[graph/nov-1-2021 ref-type]]]]))
+                                              [[graph/nov-1-2021 ref-type]]]]
+                                            nil))
               #{graph/task-1 graph/task-2}))
        (is (= (set (execute-roam-attr-query []
                                             graph/deadline-attr
                                             [[(get-operator :>)
-                                              [[graph/nov-1-2021 ref-type]]]]))
+                                              [[graph/nov-1-2021 ref-type]]]]
+                                            nil))
               #{}))
        (is (= (set (execute-roam-attr-query []
                                             graph/deadline-attr
                                             [[(get-operator :>)
-                                              [[graph/october-26-2021 ref-type]]]]))
+                                              [[graph/october-26-2021 ref-type]]]]
+                                            nil))
               #{graph/task-1}))
        (is (= (set (execute-roam-attr-query []
                                             graph/deadline-attr
                                             [[(get-operator :<=)
-                                              [[graph/october-26-2021 ref-type]]]]))
+                                              [[graph/october-26-2021 ref-type]]]]
+                                            nil))
               #{graph/task-2}))
        (is (= (set (execute-roam-attr-query []
                                             graph/deadline-attr
                                             [[(get-operator :>=)
-                                              [[graph/october-26-2021 ref-type]]]]))
+                                              [[graph/october-26-2021 ref-type]]]]
+                                            nil))
               #{graph/task-1 graph/task-2}))])))

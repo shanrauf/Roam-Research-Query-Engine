@@ -7,7 +7,8 @@
                                       attr-value->type]]
             [query.attr.operation :refer [operations->datalog-pred
                                           resolve-operation
-                                          get-operator]]
+                                          get-operator
+                                          equality-operation?]]
             [query.util :refer [ref->ref-content
                                 filter-query-blocks
                                 add-current-blocks-to-query]]))
@@ -25,19 +26,24 @@
       (subs 1)
       (keyword)))
 
+(defn- single-value-attr? [block-string]
+  (not (-> (str/trim block-string)
+           (str/ends-with? "::"))))
+
 (defonce attr-values
-  '[(attr-values ?block ?attribute ?parse-attribute-value ?v)
-    [?block :attrs/lookup ?l]
-    [?l :block/refs ?attribute]
+  '[(attr-values ?block ?attr-ref ?v ?is-single-value ?parse-attribute-value)
+    [?block :attrs/lookup ?attr-block]
+    [?attr-block :block/refs ?attr-ref]
+    [?attr-block :block/string ?attr-string]
     (or-join
-     [?l ?attribute ?v ?parse-attribute-value]
+     [?attr-block ?attr-ref ?v ?attr-string ?is-single-value ?parse-attribute-value]
      ; One-liner attribute
-     (and [(missing? $ ?l :block/children)]
-          [?l :block/refs ?refs]
-          [?l :block/string ?v]
+     (and [(?is-single-value ?attr-string)]
+          [?attr-block :block/refs ?refs]
+          [?attr-block :block/string ?v]
           ; Hacky parsing to isolate value
-          [?attribute :node/title ?attr-title]
-          [?l :block/string ?str]
+          [?attr-ref :node/title ?attr-title]
+          [?attr-block :block/string ?str]
           [(str ?attr-title "::") ?roam-attr]
           [(clojure.string/starts-with? ?str ?roam-attr)]
           [(count ?attr-title) ?attr-title-len]
@@ -46,45 +52,72 @@
           [(subs ?v 0 1) ?first-char]
           (or [(!= ?first-char " ")]
               [(subs ?v 1) ?v])
-          [(?parse-attribute-value ?v ?attribute ?refs) ?v])
+          [(?parse-attribute-value ?v ?attr-ref ?refs) ?v])
      ; Multi-value attribute
-     (and (not [(missing? $ ?l :block/children)])
-          [?l :block/children ?children]
+     (and (not [(?is-single-value ?attr-string)])
+          ; Assume multi-value (Roam doesn't add empty attrs to :attrs/lookup)
+          [?attr-block :block/children ?children]
           [?children :block/string ?v]
           (not [(re-matches #"^\s*$" ?v)])
           [(get-else $ ?children :block/refs []) ?refs]
-          [(?parse-attribute-value ?v ?attribute ?refs) ?v]))])
+          [(?parse-attribute-value ?v ?attr-ref ?refs) ?v]))])
 
 (defn- identity-aggregate [values]
   values)
 
-(defn execute-roam-attr-query [current-blocks attribute operations]
+(defn execute-roam-attr-query [current-blocks attribute operations input-refs]
   (let [operations-pred (operations->datalog-pred operations)
-        where-clauses '[[?block :attrs/lookup ?attribute]
-                        (attr-values ?block ?attribute ?parse-attribute-value ?v)]
+        ; This optimization speeds up ref-type =/INCLUDES queries by 1.5x
+        ;; since all ref values are in :attrs/lookup
+        lookup-clauses (if (seq input-refs)
+                         '[[?block :attrs/lookup ?attribute]
+                           [(ground ?input-refs) [?input-ref ...]]
+                           [?block :attrs/lookup ?input-ref]]
+                         '[[?block :attrs/lookup ?attribute]])
+        where-clauses (into lookup-clauses
+                            '[(attr-values ?block ?attribute ?v ?is-single-value ?parse-attribute-value)])
         query (into '[:find ?block (aggregate ?aggr ?v)
-                      :in $ % ?attribute ?parse-attribute-value ?aggr
+                      :in $ % ?attribute ?parse-attribute-value ?aggr ?is-single-value ?input-refs
                       :where]
                     (filter-query-blocks where-clauses))
         blocks (rd/q (add-current-blocks-to-query current-blocks query)
-                     [attr-values] attribute parse-attribute-value identity-aggregate current-blocks)]
+                     [attr-values] attribute parse-attribute-value identity-aggregate single-value-attr? input-refs current-blocks)]
     (->> blocks
          (filter #(operations-pred (second %)))
          (map first))))
 
+(defn- ref-equality-check? [attr-values operation]
+  (and (map #(= (attr-value->type %)
+                ref-type) attr-values)
+       (equality-operation? operation)))
+
 (defn roam-attr-query [current-blocks block children]
   (let [refs (block :block/refs)]
     (if (seq children)
-      (let [attr-ref (:db/id (first refs))]
+      (let [attr-ref (:db/id (first refs))
+            operation (resolve-operation attr-ref children)
+            attr-values (second operation)
+            is-ref-equality-check (ref-equality-check? attr-values operation)
+            input-refs (if is-ref-equality-check
+                         (map attr-value->value attr-values)
+                         nil)]
         (execute-roam-attr-query current-blocks
                                  attr-ref
-                                 [(resolve-operation attr-ref children)]))
-      (let [attr-title (first (str/split (block :block/string) #"::"))
+                                 [operation]
+                                 input-refs))
+      (let [attr (str/split (block :block/string) #"::")
+            attr-title (first attr)
             attr-ref (:db/id (first (filter #(= (% :node/title) attr-title) refs)))
+            input-ref (first (filter #(not= % attr-ref) (map :db/id refs)))
+            attr-value (-> (str/join "" (rest attr))
+                           (parse-attribute-value attr-ref input-ref))
             operation [(get-operator :=)
-                       [[(:db/id (first (filter #(not= % attr-ref) refs)))
-                         ref-type]]]]
-        (execute-roam-attr-query current-blocks attr-ref [operation])))))
+                       [attr-value]]
+            is-ref-equality-check (ref-equality-check? attr-value operation)]
+        ;; (println operation)
+        (execute-roam-attr-query current-blocks attr-ref [operation] (if is-ref-equality-check
+                                                                       [input-ref]
+                                                                       nil))))))
 
 (defn- execute-block-datomic-query [current-blocks ref datomic-attr]
   (let [query '[:find [?block ...]
@@ -114,13 +147,14 @@
 (defn execute-reverse-roam-attr-query [current-blocks attr-ref input-ref]
   (let [results (->>
                  (rd/q '[:find [?block ...]
-                         :in $ ?attr-ref ?input-ref ?parse-attribute-value %
+                         :in $ ?attr-ref ?input-ref ?parse-attribute-value % ?is-single-value
                          :where
-                         (attr-values ?input-ref ?attr-ref ?parse-attribute-value ?block)]
+                         (attr-values ?input-ref ?attr-ref ?block ?is-single-value ?parse-attribute-value)]
                        attr-ref
                        input-ref
                        parse-attribute-value
-                       [attr-values])
+                       [attr-values]
+                       single-value-attr?)
                  (reduce #(if (= (attr-value->type %2) ref-type)
                             (conj %1 (attr-value->value %2))
                             %1)
