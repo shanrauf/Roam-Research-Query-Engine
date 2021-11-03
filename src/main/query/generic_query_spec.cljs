@@ -26,4 +26,6 @@
      (is (= (set (generic-roam-query graph/generic-query-10-uid))
             #{graph/task-2}))
      (is (= (set (generic-roam-query graph/generic-query-11-uid))
-            #{graph/task-1 graph/task-2}))]))
+            #{graph/task-1 graph/task-2}))
+     (is (= (set (generic-roam-query graph/generic-query-12-uid))
+            #{graph/task-1}))]))

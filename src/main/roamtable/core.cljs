@@ -8,5 +8,6 @@
    [:h1 "Roam Table"]
    [counter/counter-component]])
 
+#_:clj-kondo/ignore
 (defn init []
   (d/render [roam-table] (.getElementById js/document "root")))

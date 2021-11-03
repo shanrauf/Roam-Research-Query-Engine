@@ -1,4 +1,5 @@
 (ns roamtable.query
+  #_:clj-kondo/ignore
   (:require [clojure.string :as str]
             [clojure.set :as set]
             [roam.datascript :as rd]))

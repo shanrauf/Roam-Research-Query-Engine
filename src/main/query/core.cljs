@@ -56,17 +56,13 @@
                children)))
 
 ; TODO: Roam code blocks break when there are backticks, and I can't escape them
-; TODO: how do you test this outside of Roam (because here "window" is not defined)
 (defn- javascript-clause? [block-string]
   (str/includes? block-string "``javascript"))
 (defn- execute-javascript-clause [block-string]
   (let [script (-> block-string
                    (subs 13 (- (count block-string) 3)))]
-    (println script)
-    (if script
-      (vec (-> (js/Function. script)
-               (. call)))
-      [])))
+    (vec (-> (js/Function. script)
+             (. call)))))
 
 (defn- ref-list? [block-string]
   (= ref-type
