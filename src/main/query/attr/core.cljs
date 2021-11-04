@@ -156,23 +156,22 @@
     (eval-ref-datomic-query current-blocks ref datomic-attr)))
 
 (defn eval-reverse-roam-attr-query [current-blocks attr-ref input-ref]
-  (let [results (->>
-                 (rd/q '[:find [?block ...]
-                         :in $ ?attr-ref ?input-ref ?parse-attribute-value % ?is-single-value
-                         :where
-                         (attr-values ?input-ref ?attr-ref ?block ?is-single-value ?parse-attribute-value)]
-                       attr-ref
-                       input-ref
-                       parse-attribute-value
-                       [attr-values-rule]
-                       single-value-attr?)
-                 (reduce #(if (= (attr-value->type %2) ref-type)
-                            (conj %1 (attr-value->value %2))
-                            %1)
-                         []))
-        blocks-set (set current-blocks)]
+  (let [results (->> (rd/q '[:find [?block ...]
+                             :in $ ?attr-ref ?input-ref ?parse-attribute-value % ?is-single-value
+                             :where
+                             (attr-values ?input-ref ?attr-ref ?block ?is-single-value ?parse-attribute-value)]
+                           attr-ref
+                           input-ref
+                           parse-attribute-value
+                           [attr-values-rule]
+                           single-value-attr?)
+                     (reduce #(if (= (attr-value->type %2) ref-type)
+                                (conj %1 (attr-value->value %2))
+                                %1)
+                             []))
+        current-blocks-set (set current-blocks)]
     (if (seq current-blocks)
-      (vec (filter #(contains? blocks-set %) results))
+      (vec (filter #(contains? current-blocks-set %) results))
       results)))
 
 (defn- reverse-roam-attr-query [current-blocks block]

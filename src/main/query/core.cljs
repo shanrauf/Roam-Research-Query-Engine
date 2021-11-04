@@ -10,7 +10,7 @@
                                       attr-value->type]]
             [query.roam-native :refer [roam-native-query? roam-native-query]]))
 
-(declare execute-generic-query-clause)
+(declare eval-generic-query-clause)
 
 (defn- stop-on-failure [query-result]
   (if (seq query-result)
@@ -35,7 +35,7 @@
       true
       false)))
 
-(defn- get-block-children [uid]
+(defn- uid->block-children [uid]
   (let [result (rd/q '[:find (pull ?children [:db/id :block/order :block/uid :node/title :block/string {:block/refs 2} {:block/children ...}])
                        :in $ ?query-uid
                        :where
@@ -50,8 +50,8 @@
   {:block/string "AND"
    :block/children query-tree})
 
-(defn- execute-generic-and-clause [blocks children]
-  (vec (reduce #(stop-on-failure (execute-generic-query-clause %1 %2))
+(defn- eval-generic-and-clause [blocks children]
+  (vec (reduce #(stop-on-failure (eval-generic-query-clause %1 %2))
                blocks
                children)))
 
@@ -64,22 +64,22 @@
     (vec (-> (js/Function. script)
              (. call)))))
 
-(defn- ref-list? [block-string]
+(defn- ref-list-clause? [block-string]
   (= ref-type
      (attr-value->type (parse-attribute-ref-value block-string block-string nil))))
 
-(defn- execute-ref-list-clause [block]
+(defn- eval-ref-list-clause [block]
   (mapv :db/id (:block/refs block)))
 
-(defn- execute-generic-roam-query [query-uid blocks]
-  (let [query-tree (->> (get-block-children query-uid)
+(defn- eval-generic-roam-query [query-uid blocks]
+  (let [query-tree (->> (uid->block-children query-uid)
                         (map first))]
     (if query-tree
-      (execute-generic-query-clause blocks (add-implicit-and-clause query-tree))
+      (eval-generic-query-clause blocks (add-implicit-and-clause query-tree))
       [])))
 
 
-(defn- execute-generic-query-clause [blocks clause-block]
+(defn- eval-generic-query-clause [blocks clause-block]
   (let [block-string (str/trim (clause-block :block/string))
         str-lower (str/lower-case block-string)
 
@@ -87,16 +87,16 @@
                       (sort-by :block/order))]
     (cond (branch? str-lower)
           (cond (= str-lower "and")
-                (execute-generic-and-clause blocks children)
+                (eval-generic-and-clause blocks children)
 
                 (= str-lower "or")
                 (vec (reduce #(set/union (set %1)
-                                         (set (execute-generic-query-clause blocks %2))) [] children))
+                                         (set (eval-generic-query-clause blocks %2))) [] children))
 
                 (= str-lower "not")
                 (if (seq blocks)
                   (vec (set/difference (set blocks)
-                                       (set (execute-generic-and-clause blocks children))))
+                                       (set (eval-generic-and-clause blocks children))))
                   [])
 
                 :else (throw-error generic-query-error str-lower))
@@ -113,13 +113,13 @@
           (let [query-uid (-> (:block/string clause-block)
                               (str/trim)
                               (ref->ref-content))]
-            (execute-generic-roam-query query-uid blocks))
+            (eval-generic-roam-query query-uid blocks))
 
-          (ref-list? block-string)
-          (execute-ref-list-clause clause-block)
+          (ref-list-clause? block-string)
+          (eval-ref-list-clause clause-block)
 
           :else (throw-error generic-query-error block-string))))
 
 (defn generic-roam-query [query-uid]
-  (execute-generic-roam-query query-uid []))
+  (eval-generic-roam-query query-uid []))
 

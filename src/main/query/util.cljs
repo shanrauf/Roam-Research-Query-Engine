@@ -40,6 +40,7 @@
 (defn- vec-insert [v idx value]
   (reduce #(into %1 %2) [] [(subvec v 0 idx) [value] (subvec v idx)]))
 
+; TODO Why didn't Javascript's .indexOf work? Go check again.
 (defn- index-of
   "ClojureScript replacement for .indexOf, which won't work in {{roam/render}}"
   [s v]

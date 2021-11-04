@@ -51,7 +51,8 @@
       (str/trim (subs query 8)))))
 
 (defn- date->datalog [date]
-  (let [uid (str/replace (.toLocaleDateString date "en-US") "/" "-")]
+  (let [uid (-> (.toLocaleDateString date "en-US")
+                (str/replace "/" "-"))]
     [(list 'and
            ['?e :block/uid uid]
            '[?block :block/refs ?e])]))
@@ -82,7 +83,7 @@
       (str/replace "{" "[")
       (str/replace "}" "]")))
 
-(defn- branch-clause->keyword [query-str]
+(defn- branch-clause->keyword-str [query-str]
   (reduce #(str/replace %1 (str %2 ":") (str ":" %2))
           query-str
           branch-clauses))
@@ -116,8 +117,9 @@
                  (ref-to-eid ?ref ?e)]
                query-rules ref)))
 
-(defn- combine-lists [lists]
-  (reduce #(into %1 %2) [] lists))
+(defn- merge-vecs [lists]
+  (-> (apply concat lists)
+      (vec)))
 
 (defn- reduce-query
   "Remove duplicates: [:and A [:and B]] -> [:and A B]
@@ -128,59 +130,58 @@
         new-clause (if is-duplicate-clause
                      []
                      [clause-branch-type])]
-    (into new-clause (combine-lists (mapv #(if (nested-clause? %)
-                                             (cond (= (nth % 0) clause-branch-type)
-                                                   (reduce-query % true)
+    (into new-clause (merge-vecs (mapv #(if (nested-clause? %)
+                                          (cond (= (nth % 0) clause-branch-type)
+                                                (reduce-query % true)
 
-                                                   (and (= clause-branch-type :or)
-                                                        (= (nth % 0) :not))
-                                                   []
+                                                (and (= clause-branch-type :or)
+                                                     (= (nth % 0) :not))
+                                                []
 
-                                                   :else [(reduce-query % false)])
+                                                :else [(reduce-query % false)])
 
-                                             [%]) query-content)))))
+                                          [%]) query-content)))))
 
 (defn parse-query
-  "Turn a query string into a list format that read-string can understand.
-   
+  "Transform a query string into a data type that read-string can understand.
    e.g. {and: [[A]] [[B]]} -> ['and: '[[A]]' '[[B]]']
    "
   [query-str]
   (-> query-str
       (replace-braces-with-brackets)
-      (branch-clause->keyword)
+      (branch-clause->keyword-str)
       (page-refs->strings 0)
       #_:clj-kondo/ignore
       (read-string)
       (reduce-query false)))
 
-(defn- roam-native-and [refs]
+(defn- and-refs->datalog [refs]
   [[(list 'identity refs) '?refs]
    [(list 'identity refs) '[?ref ...]]
    '[?block :block/refs ?ref]
    '(roam-native ?block ?refs)])
 
-(defn- roam-native-not [refs]
+(defn- not-refs->datalog [refs]
   [[(list 'identity refs) '?refs]
    '(roam-native ?block ?refs)])
 
-(defn- resolve-roam-native-and [refs nested-clauses]
+(defn- resolve-and-clause [refs nested-clauses]
   (into (if (seq refs)
-          (roam-native-and refs)
+          (and-refs->datalog refs)
           [])
-        (combine-lists nested-clauses)))
+        (merge-vecs nested-clauses)))
 
-(defn- resolve-roam-native-not [refs nested-clauses]
+(defn- resolve-not-clause [refs nested-clauses]
   [(concat (concat (list 'not-join '[?block])
                    (if (seq refs)
-                     (roam-native-not refs)
+                     (not-refs->datalog refs)
                      (list)))
-           (combine-lists nested-clauses))])
+           (merge-vecs nested-clauses))])
 
-(defn- resolve-roam-native-or [refs nested-clauses]
+(defn- resolve-or-clause [refs nested-clauses]
   [(concat
     (concat (list 'or-join '[?block])
-            (mapv #(concat (list 'and) (roam-native-and [%])) refs))
+            (mapv #(concat (list 'and) (and-refs->datalog [%])) refs))
     (map #(concat (list 'and) %) nested-clauses))])
 
 (defn- resolve-roam-native-between [query-content]
@@ -200,13 +201,13 @@
                       (flatten)
                       (vec))]
         (cond (= clause-branch-type :and)
-              (resolve-roam-native-and refs nested-clauses)
+              (resolve-and-clause refs nested-clauses)
 
               (= clause-branch-type :not)
-              (resolve-roam-native-not refs nested-clauses)
+              (resolve-not-clause refs nested-clauses)
 
               (= clause-branch-type :or)
-              (resolve-roam-native-or refs nested-clauses))))))
+              (resolve-or-clause refs nested-clauses))))))
 
 (defn- roam-native-query->datalog [block-string]
   (-> block-string
@@ -215,7 +216,7 @@
       (resolve-roam-native-query)
       (filter-query-blocks)))
 
-(defn- execute-roam-native-query [current-blocks clauses]
+(defn- eval-roam-native-query [current-blocks clauses]
   (let [query (->> (into '[:find [?block ...]
                            :in $ %
                            :where]
@@ -230,4 +231,4 @@
 
 (defn roam-native-query [current-blocks block-string]
   (->> (m-roam-native-query->datalog block-string)
-       (execute-roam-native-query current-blocks)))
+       (eval-roam-native-query current-blocks)))
