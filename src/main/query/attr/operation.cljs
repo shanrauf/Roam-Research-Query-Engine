@@ -10,7 +10,8 @@
                                       attr-value->type]]))
 
 (defn- equals?
-  "Check equality (including duplicates)"
+  "Check equality (complex procedure
+   because we care about duplicates)"
   [values input-attr-values]
   (let [val-count (count values)]
     (and (= val-count (count input-attr-values))
@@ -101,7 +102,7 @@
   (every? #(values-pass-operation? attr-values %) operations))
 
 
-(defn operations->datalog-pred [operations]
+(defn operations->-predicate [operations]
   (fn [values] (if (> (count operations) 0)
                  (passes-operations? values operations)
                  true)))

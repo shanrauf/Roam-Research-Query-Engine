@@ -3,7 +3,6 @@
             [roam.datascript :as rd]
             [query.util :refer [dnp-title->date-str]]))
 
-
 (defonce text-type :text-type)
 (defonce num-type :num-type)
 (defonce ref-type :ref-type)
@@ -25,7 +24,8 @@
   (first pair))
 
 (defn attr-value->timestamp [attr-val]
-  (let [date-title (eid->title (attr-value->value attr-val))]
+  (let [date-title (-> (attr-value->value attr-val)
+                       (eid->title))]
     (if date-title
       (->> date-title
            (dnp-title->date-str)
@@ -40,7 +40,7 @@
                                (-> (str/replace value roam-ref-regex "")
                                    (str/trim))
                                ref)
-    (if (= "" value)
+    (if (str/blank? value)
       [ref ref-type]
       [original-value text-type])))
 
