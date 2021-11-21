@@ -1,8 +1,7 @@
 # Roam Stuff
 
-## Development
-1. Install Clojure/Script
-2. npx shadow-cljs watch frontend
+## Setup
+1. Install Clojure
 
-## Testing
-1. npx shadow-cljs compile test
+## Development
+1. `npx shadow-cljs watch frontend` or `npx shadow-cljs watch test`

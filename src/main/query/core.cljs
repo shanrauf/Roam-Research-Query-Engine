@@ -78,7 +78,6 @@
       (eval-generic-query-clause blocks (add-implicit-and-clause query-tree))
       [])))
 
-
 (defn- eval-generic-query-clause [blocks clause-block]
   (let [block-string (str/trim (clause-block :block/string))
         str-lower (str/lower-case block-string)
@@ -122,4 +121,7 @@
 
 (defn generic-roam-query [query-uid]
   (eval-generic-roam-query query-uid []))
+
+(defn init []
+  (println "Generic roam queries"))
 

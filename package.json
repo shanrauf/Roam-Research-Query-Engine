@@ -1,5 +1,5 @@
 {
-  "name": "acme-app",
+  "name": "roam-query",
   "version": "0.0.1",
   "private": true,
   "devDependencies": {
@@ -7,6 +7,7 @@
   },
   "dependencies": {
     "react": "16.13.0",
-    "react-dom": "16.13.0"
+    "react-dom": "16.13.0",
+    "ws": "^8.2.3"
   }
 }
