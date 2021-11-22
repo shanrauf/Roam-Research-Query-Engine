@@ -8,32 +8,48 @@
                                       attr-value->timestamp
                                       attr-value->value
                                       attr-value->type]]))
-
 (defn- equals?
-  "Check equality (complex procedure
-   because we care about duplicates)"
-  [values input-attr-values]
-  (let [val-count (count values)]
-    (and (= val-count (count input-attr-values))
-         (let [sorted-values (sort (mapv attr-value->value values))
-               sorted-inputs (sort (mapv attr-value->value input-attr-values))]
-           (every? #(= (nth sorted-values %)
-                       (nth sorted-inputs %)) (range 0 val-count))))))
+  "Check equality (complex procedure because we account for
+   duplicates and values of different types)"
+  [attr-values input-values]
+  (let [val-count (count attr-values)]
+    ; Auto-fail if the # of values you're checking equality against aren't the same
+    (and (= val-count (count input-values))
+         ; TODO throws when an attribute's values are different types (cuz u can't compare them)
+         (let [grouped-attr-values (group-by attr-value->type attr-values)
+               grouped-input-values (group-by attr-value->type input-values)
+               attr-val-keys (set (keys grouped-attr-values))
+               input-val-keys (set (keys grouped-input-values))]
+           ; Stop if the attr values don't have the same types of values as
+           ; input values because then the two lists of values aren't equal
+           ; e.g. if attr-values are all text-type and input-values are all
+           ; ref-type, then stop because the values are obviously not equal
+           (if (= attr-val-keys input-val-keys)
+             (every? (fn [val-type]
+                       (let [vals (sort (get grouped-attr-values val-type))
+                             input-vals (sort (get grouped-input-values val-type))
+                             vals-count (count vals)]
+                         ; Auto-fail if the # of values of this specific type aren't equal
+                         (if (= vals-count (count input-vals))
+                           (every? #(= (nth vals %)
+                                       (nth input-vals %)) (range 0 vals-count))
+                           false))) input-val-keys)
+             false)))))
 
-(defn- less-than? [values [input-attr-value]]
-  (if (= (attr-value->type input-attr-value) ref-type)
-    (let [input-date (attr-value->timestamp input-attr-value)
-          date-values (mapv attr-value->timestamp values)]
+(defn- less-than? [attr-values [input-value]]
+  (if (= (attr-value->type input-value) ref-type)
+    (let [input-date (attr-value->timestamp input-value)
+          date-values (mapv attr-value->timestamp attr-values)]
       (every? #(< % input-date) date-values))
-    (every? #(< % (attr-value->value input-attr-value))
-            (mapv attr-value->value values))))
+    (every? #(< % (attr-value->value input-value))
+            (mapv attr-value->value attr-values))))
 
-(defn- less-than-or-equal? [values [input-attr-value]]
-  (if (= (attr-value->type input-attr-value) ref-type)
-    (let [input-date (attr-value->timestamp input-attr-value)
-          date-values (mapv attr-value->timestamp values)]
+(defn- less-than-or-equal? [attr-values [input-value]]
+  (if (= (attr-value->type input-value) ref-type)
+    (let [input-date (attr-value->timestamp input-value)
+          date-values (mapv attr-value->timestamp attr-values)]
       (every? #(<= % input-date) date-values))
-    (every? #(<= % (attr-value->value input-attr-value)) (mapv attr-value->value values))))
+    (every? #(<= % (attr-value->value input-value)) (mapv attr-value->value attr-values))))
 
 (defn- is-dnp? [values _]
   (not (boolean (some js/isNaN (mapv attr-value->timestamp values)))))
@@ -53,6 +69,7 @@
         first-input (first input-values)
         input-type (attr-value->type first-input)
         input-value (attr-value->value first-input)]
+    ;; (println input-values)
     (cond (= input-type text-type)
           (boolean (some #(boolean (if (input-regex? input-value)
                                      (re-find (input-regex-str->rexp input-value)
@@ -98,7 +115,11 @@
         input-block (first (filter (comp #{1} :block/order) operation))
         input-str (str/trim (:block/string input-block))
         input-values (mapv #(parse-attribute-value input-str attr-ref (:db/id %))
-                           (:block/refs input-block))]
+                           ; When the input value is a string, number, etc (not a ref)
+                           ;; then :block/refs is empty so just have a one-item vec
+                           ;;; so that it iterates once
+                           ;; TODO Refactor
+                           (or (:block/refs input-block) [nil]))]
     [operator input-values]))
 
 

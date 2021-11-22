@@ -12,7 +12,7 @@
  {:frontend
   {:target :browser
    :modules {:main {:init-fn roamtable.core/init}}}
-  :query
+  :query-browser
   {:target :browser
    :compiler-options {:source-map true
                       :source-map-include-sources-content true}

@@ -94,8 +94,8 @@
          (mapv first))))
 
 (defn- ref-equality-check? [attr-values operation]
-  (and (map #(= (attr-value->type %)
-                ref-type) attr-values)
+  (and (every? #(= (attr-value->type %)
+                   ref-type) attr-values)
        (equality-operation? operation)))
 
 (defn roam-attr-query [current-blocks block]
@@ -107,7 +107,7 @@
             operation (resolve-operation attr-ref children)
             attr-values (second operation)
             input-refs (if (ref-equality-check? attr-values operation)
-                         (map attr-value->value attr-values)
+                         (mapv attr-value->value attr-values)
                          nil)]
         (eval-roam-attr-query current-blocks
                               attr-ref
@@ -116,13 +116,17 @@
       (let [attr (str/split (block :block/string) #"::")
             attr-title (first attr)
             attr-ref (:db/id (first (filter #(= (% :node/title) attr-title) refs)))
-            input-ref (first (filter #(not= % attr-ref) (map :db/id refs)))
-            attr-value (-> (str/join "" (rest attr))
-                           (parse-attribute-value attr-ref input-ref))
-            operation [(get-operator :=)
-                       [attr-value]]
-            input-refs (if (ref-equality-check? attr-value operation)
-                         [input-ref]
+            ; TODO turn into one iteration with reduce
+            refs (filterv #(not= % attr-ref) (map :db/id refs))
+            attr-values (mapv #(parse-attribute-value (str/trim (str/join "" (rest attr))) attr-ref %)
+                              ; TODO: Refactor
+                              (or (and (seq refs)
+                                       refs)
+                                  [nil]))
+            operation [(get-operator :includes)
+                       attr-values]
+            input-refs (if (ref-equality-check? attr-values operation)
+                         refs
                          nil)]
         (eval-roam-attr-query current-blocks attr-ref [operation] input-refs)))))
 
@@ -255,16 +259,20 @@
                                  datomic-attr
                                  [operation]
                                  input-refs))
-      (let [input-ref (-> (:block/refs block)
-                          (first)
-                          (:db/id))
-            attr-value (-> (str/replace (:block/string block) (str datomic-attr) "")
-                           (str/trim)
-                           (parse-attribute-value datomic-attr input-ref))
-            operation [(get-operator :=)
-                       [attr-value]]
-            input-refs (if (ref-equality-check? attr-value operation)
-                         [input-ref]
+      (let [block-string (:block/string block)
+            datomic-attr (extract-datomic-attr block-string)
+            ; TODO turn into one iteration with reduce
+            refs (mapv :db/id (:block/refs block))
+            str-content (str/trim (str/replace block-string (str datomic-attr) ""))
+            attr-values (mapv #(parse-attribute-value str-content datomic-attr %)
+                              ; TODO: Refactor
+                              (or (and (seq refs)
+                                       refs)
+                                  [nil]))
+            operation [(get-operator :includes)
+                       attr-values]
+            input-refs (if (ref-equality-check? attr-values operation)
+                         refs
                          nil)]
         (eval-datomic-attr-query current-blocks datomic-attr [operation] input-refs)))))
 

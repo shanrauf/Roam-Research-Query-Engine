@@ -120,6 +120,7 @@
 (defn generic-roam-query [query-uid]
   (eval-generic-roam-query query-uid []))
 
+#_:clj-kondo/ignore
 (defn init []
   (println "Generic roam queries"))
 

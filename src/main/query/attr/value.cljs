@@ -49,7 +49,11 @@
     (cond
       (re-find float-regex value) [(js/parseFloat value)
                                    num-type]
-      (re-find roam-ref-regex value) (if (= attr-ref ref)
+      (re-find roam-ref-regex value) (if (or (= attr-ref ref)
+                                             ; sometimes I just pass in nil when I know it's not a ref
+                                             ; although may want to refactor parsing
+                                             ; TODO Refactor
+                                             (= ref nil))
                                        nil
                                        (parse-attribute-ref-value value
                                                                   value
