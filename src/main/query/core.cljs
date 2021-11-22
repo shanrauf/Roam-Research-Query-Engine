@@ -2,7 +2,6 @@
   (:require [clojure.string :as str]
             [clojure.set :as set]
             [roam.datascript :as rd]
-            [query.errors :refer [throw-error generic-query-error]]
             [query.util :refer [branch? ref->ref-content]]
             [query.attr.core :refer [attr-query? attr-query]]
             [query.attr.value :refer [parse-attribute-ref-value
@@ -67,7 +66,6 @@
 (defn- ref-list-clause? [block-string]
   (= ref-type
      (attr-value->type (parse-attribute-ref-value block-string block-string nil))))
-
 (defn- eval-ref-list-clause [block]
   (mapv :db/id (:block/refs block)))
 
@@ -98,9 +96,9 @@
                                        (set (eval-generic-and-clause blocks children))))
                   [])
 
-                :else (throw-error generic-query-error str-lower))
+                :else (throw (js/Error. (str "Invalid branch: " str-lower))))
           (attr-query? clause-block)
-          (attr-query blocks clause-block children)
+          (attr-query blocks clause-block)
 
           (roam-native-query? block-string)
           (roam-native-query blocks block-string)
@@ -117,7 +115,7 @@
           (ref-list-clause? block-string)
           (eval-ref-list-clause clause-block)
 
-          :else (throw-error generic-query-error block-string))))
+          :else (throw (js/Error. (str "Unknown query clause: " block-string))))))
 
 (defn generic-roam-query [query-uid]
   (eval-generic-roam-query query-uid []))

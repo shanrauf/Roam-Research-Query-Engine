@@ -7,8 +7,8 @@
                                 branch-clauses
                                 ref-length
                                 dnp-title->date-str
+                                filter-table-column-specs
                                 filter-query-blocks]]
-            [query.errors :refer [throw-error roam-native-error]]
             [roam.datascript :as rd]))
 
 (defonce roam-native-rule
@@ -104,7 +104,7 @@
                                           (-> ref-start
                                               (+ len)
                                               (+ 2)))
-          :else (throw-error roam-native-error query-str))))
+          :else (throw (js/Error. (str "Invalid Roam native query: " query-str))))))
 
 
 (defn- nested-clause? [clause]
@@ -214,14 +214,15 @@
       (trim-roam-native-query)
       (parse-query)
       (resolve-roam-native-query)
-      (filter-query-blocks)))
+      (filter-query-blocks)
+      (filter-table-column-specs)))
 
 (defn- eval-roam-native-query [current-blocks clauses]
-  (let [query (->> (into '[:find [?block ...]
-                           :in $ %
-                           :where]
-                         clauses)
-                   (add-current-blocks-to-query current-blocks))]
+  (let [query (-> (into '[:find [?block ...]
+                          :in $ %
+                          :where]
+                        clauses)
+                  (add-current-blocks-to-query current-blocks))]
     (rd/q query
           query-rules
           current-blocks)))

@@ -1,5 +1,6 @@
 (ns query.util
-  (:require [clojure.string :as str]))
+  (:require [clojure.string :as str]
+            [clojure.set :as set]))
 
 (defonce branch-clauses ["and" "or" "not" "between"])
 (defn branch? [branch]
@@ -50,7 +51,7 @@
       (= v (first items)) idx
       :else (recur (inc idx) (rest items)))))
 
-(defn add-current-blocks-to-query [current-blocks query]
+(defn add-current-blocks-to-query [query current-blocks]
   (let [where-idx (index-of query :where)
         new-query (vec-insert query where-idx '?current-blocks)]
     (if (seq current-blocks)
@@ -58,13 +59,22 @@
       new-query)))
 
 (defn filter-query-blocks [where-clauses]
-  (into where-clauses '[[?query-ref :node/title "query"]
-                        (not-join [?block ?query-ref]
+  (into where-clauses '[(not-join [?block]
+                                  [?query-ref :node/title "query"]
                                   (or-join
                                    [?block ?query-ref]
                                    [?block :block/refs ?query-ref]
                                    (and [?block :block/parents ?parents]
                                         [?parents :block/refs ?query-ref])))]))
+
+(defn filter-table-column-specs [where-clauses]
+  (into where-clauses '[(not-join [?block]
+                                  [?spec-ref :node/title "Table Columns"]
+                                  (or-join
+                                   [?block ?spec-ref]
+                                   [?block :block/refs ?spec-ref]
+                                   (and [?block :block/parents ?parents]
+                                        [?parents :block/refs ?spec-ref])))]))
 
 (defn remove-backticks [block-string]
   (if (and (str/starts-with? block-string "`")
@@ -84,3 +94,34 @@
      (= x "[") (recur xs (inc count) (inc len))
      (= x "]") (recur xs (dec count) (inc len))
      :else (recur xs count (inc len)))))
+
+(defonce text-datomic-attrs
+  #{:block/string
+    :create/email
+    :node/title
+    :block/text-align
+    :block/uid
+    :children/view-type
+    :edit/email})
+
+(defonce num-datomic-attrs
+  #{:create/time
+    :edit/time
+    :block/order
+    :block/heading
+    :db/id})
+
+(defonce block-datomic-attrs
+  #{:attrs/lookup :attrs/_lookup
+    :block/children :block/_children
+    :block/page :block/_page
+    :block/parents :block/_parents
+    :block/refs :block/_refs
+    :edit/seen-by
+    :edit/user})
+
+; TODO Missing :block/open because I don't have a boolean type right now.
+(defonce datomic-attrs
+  (set/union text-datomic-attrs
+             num-datomic-attrs
+             block-datomic-attrs))

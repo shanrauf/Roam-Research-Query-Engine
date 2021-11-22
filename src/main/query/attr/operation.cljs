@@ -38,24 +38,32 @@
 (defn- is-dnp? [values _]
   (not (boolean (some js/isNaN (mapv attr-value->timestamp values)))))
 
+(defn- input-regex? [input]
+  (and (str/starts-with? input "/")
+       (str/ends-with? input "/")))
+
+(defn- input-regex-str->rexp [input]
+  (-> input
+      (subs 1 (- (count input) 1))
+      (str/lower-case)
+      (re-pattern)))
+
 (defn- includes? [attr-values input-values]
   (let [values (mapv attr-value->value attr-values)
         first-input (first input-values)
         input-type (attr-value->type first-input)
-        input-value (attr-value->value first-input)
-        text-input-regex (->> input-value
-                              (str)
-                              (str/lower-case)
-                              (re-pattern))]
+        input-value (attr-value->value first-input)]
     (cond (= input-type text-type)
-          (boolean (some #(boolean (re-find text-input-regex
-                                            (str/lower-case %))) values))
+          (boolean (some #(boolean (if (input-regex? input-value)
+                                     (re-find (input-regex-str->rexp input-value)
+                                              (str/lower-case %))
+                                     (str/includes? % input-value))) values))
 
           (= input-type num-type)
           (boolean (some #(= input-value %) values))
 
-          :else (every? #(boolean (some #{(attr-value->value %)}
-                                        values)) input-values))))
+          :else (every? #(boolean (some #{%}
+                                        values)) (map attr-value->value input-values)))))
 
 (defn equality-operation? [operation]
   (let [op (first operation)]

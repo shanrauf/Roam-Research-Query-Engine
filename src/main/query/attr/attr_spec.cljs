@@ -2,8 +2,8 @@
   (:require [cljs.test :refer (deftest is testing)]
             [roam.test-graph :as graph]
             [query.attr.core :refer [eval-roam-attr-query
-                                     eval-ref-datomic-query
-                                     eval-reverse-roam-attr-query]]
+                                     eval-reverse-roam-attr-query
+                                     eval-datomic-attr-query]]
             [query.attr.operation :refer [get-operator]]
             [query.attr.value :refer [text-type num-type ref-type parse-attribute-value]]))
 
@@ -24,13 +24,39 @@
             #{graph/task-2 graph/task-3}))
      (is (= (set (eval-reverse-roam-attr-query [] graph/status-attr graph/task-2))
             #{graph/completed graph/october-28-2021}))])
-  (testing "Ref Datomic attributes"
-    [(is (= (set (eval-ref-datomic-query [] (:db/id graph/test-block-0) :block/children))
-            (set (:block/children graph/test-block-0))))
-     (is (= (set (eval-ref-datomic-query [] (:db/id graph/test-block-1) :block/children))
-            (set (:block/children graph/test-block-1))))
-     (is (= (set (eval-ref-datomic-query [] (:db/id graph/test-block-2) :block/parents))
-            (set (:block/parents graph/test-block-2))))])
+  ;; (testing "Ref Datomic attributes"
+  ;;   [(is (= (set (eval-ref-datomic-query [] (:db/id graph/test-block-0) :block/children))
+  ;;           (set (:block/children graph/test-block-0))))
+  ;;    (is (= (set (eval-ref-datomic-query [] (:db/id graph/test-block-1) :block/children))
+  ;;           (set (:block/children graph/test-block-1))))
+  ;;    (is (= (set (eval-ref-datomic-query [] (:db/id graph/test-block-2) :block/parents))
+  ;;           (set (:block/parents graph/test-block-2))))])
+  (testing "Datomic attributes"
+    [(is (= (set (eval-datomic-attr-query []
+                                          :block/children
+                                          [[(get-operator :includes)
+                                            (mapv #(identity [% ref-type])
+                                                  (:block/children graph/test-block-0))]]
+                                          (:block/children graph/test-block-0)))
+            (set [(:db/id graph/test-block-0)])))
+     (is (= (set (eval-datomic-attr-query []
+                                          :block/refs
+                                          [[(get-operator :includes)
+                                            [[graph/october-31-2021 ref-type]]]]
+                                          [graph/october-31-2021]))
+            (set [graph/task-2])))
+     (is (= (set (eval-datomic-attr-query []
+                                          :create/time
+                                          [[(get-operator :=)
+                                            [[1635382157454 num-type]]]]
+                                          []))
+            (set [graph/task-1])))
+     (is (= (set (eval-datomic-attr-query []
+                                          :block/uid
+                                          [[(get-operator :=)
+                                            [["w9YC_4vTm" text-type]]]]
+                                          []))
+            (set [graph/task-1])))])
   (testing "Returns properly whether single/multi-value attributes"
     [(is (= (set (eval-roam-attr-query []
                                        graph/type-attr
@@ -74,7 +100,7 @@
        (is (= (set (eval-roam-attr-query []
                                          graph/description-attr
                                          [[(get-operator :includes)
-                                           [["task 2" text-type]]]]
+                                           [["/task 2$/" text-type]]]]
                                          nil))
               #{graph/task-2}))
        (is (= (set (eval-roam-attr-query []
