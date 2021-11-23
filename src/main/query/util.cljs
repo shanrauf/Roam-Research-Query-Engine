@@ -111,14 +111,26 @@
     :block/heading
     :db/id})
 
+(defonce reverse->block-datomic-attrs
+  {:attrs/_lookup :attrs/lookup
+   :block/_children :block/children
+   :block/_page :block/page
+   :block/_parents :block/parents
+   :block/_refs :block/refs})
+
+(defonce reverse-block-datomic-attrs
+  (set (into (keys reverse->block-datomic-attrs)
+             (vals reverse->block-datomic-attrs))))
+
 (defonce block-datomic-attrs
-  #{:attrs/lookup :attrs/_lookup
-    :block/children :block/_children
-    :block/page :block/_page
-    :block/parents :block/_parents
-    :block/refs :block/_refs
-    :edit/seen-by
-    :edit/user})
+  (set/union reverse-block-datomic-attrs
+             #{:attrs/lookup
+               :block/children
+               :block/page
+               :block/parents
+               :block/refs
+               :edit/seen-by
+               :edit/user}))
 
 ; TODO Missing :block/open because I don't have a boolean type right now.
 (defonce datomic-attrs

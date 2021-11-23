@@ -18,6 +18,7 @@
                                 block-datomic-attrs
                                 text-datomic-attrs
                                 num-datomic-attrs
+                                reverse->block-datomic-attrs
                                 add-current-blocks-to-query]]))
 
 (defn- extract-datomic-attr [block-string]
@@ -27,6 +28,12 @@
                   (if (contains? datomic-attrs attr)
                     (reduced attr)
                     %1)) nil)))
+
+(defn- reverse-datomic-attr? [attr]
+  (contains? reverse->block-datomic-attrs attr))
+
+(defn- flip-datomic-attr [attr]
+  (get reverse->block-datomic-attrs attr))
 
 (defn single-value-attr? [block-string]
   (not (-> (str/trim block-string)
@@ -170,16 +177,6 @@
 ;;     (eval-ref-datomic-query current-blocks ref datomic-attr)))
 
 (defn eval-reverse-roam-attr-query [current-blocks attr-ref input-ref]
-  (println (rd/q '[:find [?block ...]
-                   :in $ ?attr-ref ?input-ref ?extract-attr-values % ?is-single-value ?eid->block-refs
-                   :where
-                   (attr-values ?input-ref ?attr-ref ?block ?is-single-value ?extract-attr-values ?eid->block-refs)]
-                 attr-ref
-                 input-ref
-                 extract-attr-values
-                 [attr-values-rule]
-                 single-value-attr?
-                 eid->block-refs))
   (let [results (->> (rd/q '[:find [?block ...]
                              :in $ ?attr-ref ?input-ref ?extract-attr-values % ?is-single-value ?eid->block-refs
                              :where
@@ -259,6 +256,16 @@
                        (operations-pred)))
          (mapv first))))
 
+(defn eval-reverse-datomic-attr-query [current-blocks datomic-attr input-refs]
+  (rd/q (-> '[:find [?block ...]
+              :in $ ?datomic-attr ?input-refs
+              :where]
+            (into (-> '[[(ground ?input-refs) [?input-ref ...]]
+                        [?input-ref ?datomic-attr ?block]]
+                      (filter-query-blocks)))
+            (add-current-blocks-to-query current-blocks))
+        (flip-datomic-attr datomic-attr) input-refs current-blocks))
+
 (defn datomic-attr-query [current-blocks block]
   (let [children (->> (:block/children block)
                       (sort-by :block/order))
@@ -284,7 +291,9 @@
             input-refs (if (ref-equality-check? attr-values operation)
                          refs
                          nil)]
-        (eval-datomic-attr-query current-blocks datomic-attr [operation] input-refs)))))
+        (if (reverse-datomic-attr? datomic-attr)
+          (eval-reverse-datomic-attr-query current-blocks datomic-attr input-refs)
+          (eval-datomic-attr-query current-blocks datomic-attr [operation] input-refs))))))
 
 (defn attr-query? [block]
   (let [block-string (str/trim (block :block/string))]

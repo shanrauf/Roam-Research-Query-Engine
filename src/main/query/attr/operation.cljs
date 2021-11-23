@@ -11,14 +11,14 @@
 (defn- equals?
   "Check equality (complex procedure because we account for
    duplicates and values of different types)"
-  [attr-values input-values]
+  [attr-values input-attr-values]
   (let [val-count (count attr-values)]
     ; Auto-fail if the # of values you're checking equality against aren't the same
-    (and (= val-count (count input-values))
+    (and (= val-count (count input-attr-values))
          (let [grouped-attr-values (group-by attr-value->type attr-values)
-               grouped-input-values (group-by attr-value->type input-values)
+               grouped-input-attr-values (group-by attr-value->type input-attr-values)
                attr-val-keys (set (keys grouped-attr-values))
-               input-val-keys (set (keys grouped-input-values))]
+               input-val-keys (set (keys grouped-input-attr-values))]
            ; Stop if the attr values don't have the same types of values as
            ; input values because then the two lists of values aren't equal
            ; e.g. if attr-values are all text-type and input-values are all
@@ -26,7 +26,7 @@
            (if (= attr-val-keys input-val-keys)
              (every? (fn [val-type]
                        (let [vals (sort (get grouped-attr-values val-type))
-                             input-vals (sort (get grouped-input-values val-type))
+                             input-vals (sort (get grouped-input-attr-values val-type))
                              vals-count (count vals)]
                          ; Auto-fail if the # of values of this specific type aren't equal
                          (if (= vals-count (count input-vals))
@@ -35,20 +35,23 @@
                            false))) input-val-keys)
              false)))))
 
-(defn- less-than? [attr-values [input-value]]
-  (if (= (attr-value->type input-value) ref-type)
-    (let [input-date (attr-value->timestamp input-value)
+(defn- less-than? [attr-values [input-attr-value]]
+  (if (= (attr-value->type input-attr-value) ref-type)
+    (let [input-date (attr-value->timestamp input-attr-value)
           date-values (mapv attr-value->timestamp attr-values)]
       (every? #(< % input-date) date-values))
-    (every? #(< % (attr-value->value input-value))
+    (every? #(let [input-val (attr-value->value input-attr-value)]
+               (< % input-val))
             (mapv attr-value->value attr-values))))
 
-(defn- less-than-or-equal? [attr-values [input-value]]
-  (if (= (attr-value->type input-value) ref-type)
-    (let [input-date (attr-value->timestamp input-value)
+(defn- less-than-or-equal? [attr-values [input-attr-value]]
+  (if (= (attr-value->type input-attr-value) ref-type)
+    (let [input-date (attr-value->timestamp input-attr-value)
           date-values (mapv attr-value->timestamp attr-values)]
       (every? #(<= % input-date) date-values))
-    (every? #(<= % (attr-value->value input-value)) (mapv attr-value->value attr-values))))
+    (every? #(let [input-val (attr-value->value input-attr-value)]
+               (<= % input-val))
+            (mapv attr-value->value attr-values))))
 
 (defn- is-dnp? [values _]
   (not (boolean (some js/isNaN (mapv attr-value->timestamp values)))))
@@ -65,9 +68,9 @@
 
 ; NOTE: We assume there is only one input-value if text-type or num-type because
 ; we don't support passing in a list of strings/numbers. This may change though...
-(defn- includes? [attr-values input-values]
+(defn- includes? [attr-values input-attr-values]
   (let [values (mapv attr-value->value attr-values)
-        first-input (first input-values)
+        first-input (first input-attr-values)
         input-type (attr-value->type first-input)
         input-value (attr-value->value first-input)]
     (cond (= input-type text-type)
@@ -80,7 +83,7 @@
           (boolean (some #(= input-value %) values))
 
           :else (every? #(boolean (some #{%}
-                                        values)) (map attr-value->value input-values)))))
+                                        values)) (map attr-value->value input-attr-values)))))
 
 (defn equality-operation? [operation]
   (let [op (first operation)]

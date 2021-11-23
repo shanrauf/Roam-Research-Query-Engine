@@ -41,5 +41,7 @@
             #{graph/task-2}))
      (is (= (set (generic-roam-query graph/generic-query-18-uid))
             #{graph/task-2}))
+     (is (= (set (generic-roam-query graph/generic-query-20-uid))
+            #{graph/october-31-2021 graph/nov-3-2021}))
      (is (= (set (generic-roam-query graph/generic-query-21-uid))
             #{graph/task-2}))]))
