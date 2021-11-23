@@ -4,7 +4,7 @@
             [query.core :refer [generic-roam-query]]))
 
 (deftest roam-attr-spec []
-  (testing "Roam attr"
+  (testing "Generic Roam queries"
     [(is (= (set (generic-roam-query graph/generic-query-1-uid))
             #{graph/task-2}))
      (is (= (set (generic-roam-query graph/generic-query-2-uid))
@@ -40,4 +40,6 @@
      (is (= (set (generic-roam-query graph/generic-query-17-uid))
             #{graph/task-2}))
      (is (= (set (generic-roam-query graph/generic-query-18-uid))
+            #{graph/task-2}))
+     (is (= (set (generic-roam-query graph/generic-query-21-uid))
             #{graph/task-2}))]))

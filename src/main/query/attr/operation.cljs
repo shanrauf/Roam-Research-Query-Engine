@@ -4,7 +4,7 @@
             [query.attr.value :refer [ref-type
                                       num-type
                                       text-type
-                                      parse-attribute-value
+                                      extract-attr-values
                                       attr-value->timestamp
                                       attr-value->value
                                       attr-value->type]]))
@@ -15,7 +15,6 @@
   (let [val-count (count attr-values)]
     ; Auto-fail if the # of values you're checking equality against aren't the same
     (and (= val-count (count input-values))
-         ; TODO throws when an attribute's values are different types (cuz u can't compare them)
          (let [grouped-attr-values (group-by attr-value->type attr-values)
                grouped-input-values (group-by attr-value->type input-values)
                attr-val-keys (set (keys grouped-attr-values))
@@ -64,12 +63,13 @@
       (str/lower-case)
       (re-pattern)))
 
+; NOTE: We assume there is only one input-value if text-type or num-type because
+; we don't support passing in a list of strings/numbers. This may change though...
 (defn- includes? [attr-values input-values]
   (let [values (mapv attr-value->value attr-values)
         first-input (first input-values)
         input-type (attr-value->type first-input)
         input-value (attr-value->value first-input)]
-    ;; (println input-values)
     (cond (= input-type text-type)
           (boolean (some #(boolean (if (input-regex? input-value)
                                      (re-find (input-regex-str->rexp input-value)
@@ -106,20 +106,15 @@
     (get query-operators op-name)
     (get query-operators (keyword (str/lower-case op-name)))))
 
-(defn resolve-operation [attr-ref operation]
-  (let [operator (-> (first (filter (comp #{0} :block/order) operation))
+(defn resolve-operation [attr-ref op-blocks]
+  (let [operator (-> (first (filter (comp #{0} :block/order) op-blocks))
                      (:block/string)
                      (str/trim)
                      (remove-backticks)
                      (get-operator))
-        input-block (first (filter (comp #{1} :block/order) operation))
+        input-block (first (filter (comp #{1} :block/order) op-blocks))
         input-str (str/trim (:block/string input-block))
-        input-values (mapv #(parse-attribute-value input-str attr-ref (:db/id %))
-                           ; When the input value is a string, number, etc (not a ref)
-                           ;; then :block/refs is empty so just have a one-item vec
-                           ;;; so that it iterates once
-                           ;; TODO Refactor
-                           (or (:block/refs input-block) [nil]))]
+        input-values (extract-attr-values input-str attr-ref (mapv :db/id (:block/refs input-block)))]
     [operator input-values]))
 
 

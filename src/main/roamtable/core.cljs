@@ -9,7 +9,7 @@
                             single-value-attr?
                             identity-aggregate]]
    [query.util :refer [datomic-attrs]]
-   [query.attr.value :refer [parse-attribute-value]]
+   [query.attr.value :refer [extract-attr-values]]
    [clojure.string :as str]))
 
 (def test-headers
@@ -122,15 +122,15 @@
            datomic-attr-spec []}
           spec))
 
-(defn- reverse-query [input-block attr]
-  (eval-roam-attr-query [] attr [] [input-block])
-  (rd/q '[:find ?block (aggregate ?identity ?v)
-          :in $ % ?input-block ?identity ?is-single-value ?parse-attribute-value
-          :where
-          [?input-block :attrs/_lookup ?block]
-          [?block :attrs/lookup ?attribute]
-          (attr-values ?block ?attribute ?v ?is-single-value ?parse-attribute-value)]
-        [attr-values-rule] input-block identity-aggregate single-value-attr? parse-attribute-value))
+;; (defn- reverse-query [input-block attr]
+;;   (eval-roam-attr-query [] attr [] [input-block])
+;;   (rd/q '[:find ?block (aggregate ?identity ?v)
+;;           :in $ % ?input-block ?identity ?is-single-value ?parse-attribute-value
+;;           :where
+;;           [?input-block :attrs/_lookup ?block]
+;;           [?block :attrs/lookup ?attribute]
+;;           (attr-values ?block ?attribute ?v ?is-single-value ?parse-attribute-value)]
+;;         [attr-values-rule] input-block identity-aggregate single-value-attr? parse-attribute-value))
 
 ; extract-attrs-from-spec
 ; Then generate 1 query for attributes and do one (rd/pull) for datomic attrs

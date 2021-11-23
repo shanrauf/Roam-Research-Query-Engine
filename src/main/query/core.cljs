@@ -63,9 +63,14 @@
     (vec (-> (js/Function. script)
              (. call)))))
 
-(defn- ref-list-clause? [block-string]
-  (= ref-type
-     (attr-value->type (parse-attribute-ref-value block-string block-string nil))))
+(defn- ref-list-clause? [block]
+  (let [block-string (:block/string block)]
+    (= ref-type
+       (-> (parse-attribute-ref-value block-string
+                                      block-string
+                                      (:block/refs block))
+           (first)
+           (attr-value->type)))))
 (defn- eval-ref-list-clause [block]
   (mapv :db/id (:block/refs block)))
 
@@ -112,7 +117,7 @@
                               (ref->ref-content))]
             (eval-generic-roam-query query-uid blocks))
 
-          (ref-list-clause? block-string)
+          (ref-list-clause? clause-block)
           (eval-ref-list-clause clause-block)
 
           :else (throw (js/Error. (str "Unknown query clause: " block-string))))))

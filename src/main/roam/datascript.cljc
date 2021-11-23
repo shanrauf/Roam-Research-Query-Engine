@@ -15,5 +15,8 @@
 (defn q [& args]
   (apply d/q (add-db-to-args args)))
 
+(defn entity [eid]
+  (d/entity @db eid))
+
 ;; (defn pull [& args]
 ;;   (apply d/pull (add-db-to-args args)))

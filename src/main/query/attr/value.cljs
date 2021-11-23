@@ -34,29 +34,22 @@
 
 (defn parse-attribute-ref-value
   "The attribute is a ref type if the value ONLY contains references"
-  [original-value value ref]
+  [original-value value refs]
   (if (re-find roam-ref-regex value)
     (parse-attribute-ref-value original-value
                                (-> (str/replace value roam-ref-regex "")
                                    (str/trim))
-                               ref)
+                               refs)
     (if (str/blank? value)
-      [ref ref-type]
-      [original-value text-type])))
+      (mapv #(identity [% ref-type]) refs)
+      [[original-value text-type]])))
 
-(defn parse-attribute-value [input attr-ref ref]
-  (let [value (str/trim input)]
+(defn extract-attr-values [input attribute input-refs]
+  (let [value (str/trim input)
+        ; Attribute is either a Roam attribute or a Datomic attribute
+        refs (filterv #(not= attribute %) input-refs)]
     (cond
-      (re-find float-regex value) [(js/parseFloat value)
-                                   num-type]
-      (re-find roam-ref-regex value) (if (or (= attr-ref ref)
-                                             ; sometimes I just pass in nil when I know it's not a ref
-                                             ; although may want to refactor parsing
-                                             ; TODO Refactor
-                                             (= ref nil))
-                                       nil
-                                       (parse-attribute-ref-value value
-                                                                  value
-                                                                  ref))
-      :else [value text-type])))
-
+      (re-find float-regex value) [[(js/parseFloat value) num-type]]
+      (and (seq refs)
+           (re-find roam-ref-regex value)) (parse-attribute-ref-value value value refs)
+      :else [[value text-type]])))
