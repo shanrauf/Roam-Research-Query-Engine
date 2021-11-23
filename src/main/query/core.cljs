@@ -2,9 +2,8 @@
   (:require [clojure.string :as str]
             [clojure.set :as set]
             [roam.datascript :as rd]
-            [query.util :refer [branch? ref->ref-content add-current-blocks-to-query]]
+            [query.util :refer [is_dnp branch? add-current-blocks-to-query ref->ref-content]]
             [query.attr.core :refer [attr-query? attr-query]]
-            [query.attr.operation :refer [is_dnp]]
             [query.attr.value :refer [parse-attribute-ref-value
                                       ref-type
                                       dnp-title-regex
@@ -17,41 +16,6 @@
   (if (seq query-result)
     query-result
     []))
-
-(defn- dnp-filter-clause? [block-string]
-  (= (->
-      (str/trim block-string)
-      (str/lower-case)
-      (keyword))
-     is_dnp))
-
-(defn- eval-dnp-clause [blocks]
-  (rd/q (add-current-blocks-to-query
-         '[:find [?block ...]
-           :in $ ?dnp-title-regex
-           :where
-           [?block :node/title ?title]
-           [(re-matches ?dnp-title-regex ?title)]]
-         blocks)
-        dnp-title-regex blocks))
-
-(defn- generic-query-ref? [clause-block]
-  (let [ref-count (count (:block/refs clause-block))
-        ref (-> (:block/string clause-block)
-                (str/trim)
-                (ref->ref-content))]
-    (if (and (= ref-count 1)
-             (seq (rd/q '[:find ?e
-                          :in $ ?ref
-                          :where
-                          [?e :block/uid ?ref]
-                          [?e :block/parents ?direct-parent]
-                          [?direct-parent :block/children ?e]
-                          [?query-attr :node/title "query"]
-                          [?direct-parent :attrs/lookup ?query-attr]]
-                        ref)))
-      true
-      false)))
 
 (defn- uid->block-children [uid]
   (let [result (rd/q '[:find (pull ?children [:db/id :block/order :block/uid :node/title :block/string {:block/refs 2} {:block/children ...}])
@@ -73,6 +37,58 @@
                blocks
                children)))
 
+(defn- eval-generic-roam-query [query-uid blocks]
+  (let [query-tree (->> (uid->block-children query-uid)
+                        (map first))]
+    (if query-tree
+      (eval-generic-query-clause blocks (add-implicit-and-clause query-tree))
+      [])))
+
+(defn generic-query-attr? [block-string]
+  (str/starts-with? (str/trim block-string) "query::"))
+
+(defn generic-query-clause? [clause-block]
+  (let [ref-count (count (:block/refs clause-block))
+        block-string (:block/string clause-block)
+        ref (-> block-string
+                (str/trim)
+                (ref->ref-content))]
+    (and (= ref-count 1)
+         (or (generic-query-attr? block-string)
+             (seq (rd/q '[:find ?e
+                          :in $ ?ref
+                          :where
+                          [?e :block/uid ?ref]
+                          [?e :block/parents ?direct-parent]
+                          [?direct-parent :block/children ?e]
+                          [?query-attr :node/title "query"]
+                          [?direct-parent :attrs/lookup ?query-attr]]
+                        ref))))))
+
+
+(defn get-query-uid [block]
+  (if (generic-query-attr? (:block/string block))
+    (:block/uid block)
+    (:block/uid (first (:block/refs block)))))
+
+(defn- dnp-filter-clause? [block-string]
+  (= (->
+      (str/trim block-string)
+      (str/lower-case)
+      (keyword))
+     is_dnp))
+
+(defn- eval-dnp-clause [blocks]
+  (rd/q (add-current-blocks-to-query
+         '[:find [?block ...]
+           :in $ ?dnp-title-regex
+           :where
+           [?block :node/title ?title]
+           [(re-matches ?dnp-title-regex ?title)]]
+         blocks)
+        dnp-title-regex blocks))
+
+
 ; NOTE: Roam code blocks break when there are backticks, and I can't escape them
 (defn- javascript-clause? [block-string]
   (str/includes? block-string "``javascript"))
@@ -93,12 +109,6 @@
 (defn- eval-ref-list-clause [block]
   (mapv :db/id (:block/refs block)))
 
-(defn- eval-generic-roam-query [query-uid blocks]
-  (let [query-tree (->> (uid->block-children query-uid)
-                        (map first))]
-    (if query-tree
-      (eval-generic-query-clause blocks (add-implicit-and-clause query-tree))
-      [])))
 
 (defn- eval-generic-query-clause [blocks clause-block]
   (let [block-string (str/trim (clause-block :block/string))
@@ -134,10 +144,8 @@
           (javascript-clause? block-string)
           (execute-javascript-clause block-string)
 
-          (generic-query-ref? clause-block)
-          (let [query-uid (-> (:block/string clause-block)
-                              (str/trim)
-                              (ref->ref-content))]
+          (generic-query-clause? clause-block)
+          (let [query-uid (get-query-uid clause-block)]
             (eval-generic-roam-query query-uid blocks))
 
           (ref-list-clause? clause-block)

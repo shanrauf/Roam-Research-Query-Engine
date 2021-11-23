@@ -1,6 +1,6 @@
 (ns query.attr.operation
   (:require [clojure.string :as str]
-            [query.util :refer [remove-backticks]]
+            [query.util :refer [remove-backticks is_dnp]]
             [query.attr.value :refer [ref-type
                                       num-type
                                       text-type
@@ -74,6 +74,19 @@
 (defn- is-dnp? [values _]
   (not (boolean (some js/isNaN (mapv attr-value->timestamp values)))))
 
+;; (defn- some-attr-values-satisfy-generic-clause-op [clause-block]
+;;   ; make sure all attr values are refs? or wrap i ntry catch if faster? idk
+;;   (fn [attr-values _]
+;;     (> (count (eval-generic-roam-query (get-query-uid clause-block)
+;;                                        (mapv attr-value->value attr-values)))
+;;        0)))
+
+;; (defn- all-attr-values-satisfy-generic-clause-op [clause-block]
+;;   (fn [attr-values _]
+;;     (= (count attr-values)
+;;        (count (eval-generic-roam-query (get-query-uid clause-block)
+;;                                        (mapv attr-value->value attr-values))))))
+
 (defn- input-regex? [input]
   (and (str/starts-with? input "/")
        (str/ends-with? input "/")))
@@ -112,8 +125,6 @@
     (or (= op equals?)
         (= op includes?))))
 
-(defonce is_dnp :is_dnp)
-
 (defonce one-line-query-operators
   {is_dnp is-dnp?
    :not_empty not-empty?})
@@ -148,13 +159,22 @@
     (if (contains? one-line-query-operators (keyword operator-str))
       [operator []]
       (let [input-block (first (filter (comp #{1} :block/order) op-blocks))
-            input-str (str/trim (:block/string input-block))
-            input-values (if (contains? one-line-query-operators (keyword operator-str))
-                           []
-                           (extract-attr-values input-str
-                                                attr-ref
-                                                (mapv :db/id (:block/refs input-block))))]
-        [operator input-values]))))
+            input-str (str/trim (:block/string input-block))]
+        (if
+        ;;  (and (or (= operator includes?)
+        ;;              (= operator equals?))
+        ;;          (generic-query-clause? input-block))
+        ;;   [(if (= operator includes?)
+        ;;      (some-attr-values-satisfy-generic-clause-op input-block)
+        ;;      (all-attr-values-satisfy-generic-clause-op input-block))
+        ;;    []]
+         false
+          []
+          [operator (if (contains? one-line-query-operators (keyword operator-str))
+                      []
+                      (extract-attr-values input-str
+                                           attr-ref
+                                           (mapv :db/id (:block/refs input-block))))])))))
 
 
 (defn- values-pass-operation? [attr-values operation]

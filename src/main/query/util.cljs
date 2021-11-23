@@ -19,6 +19,8 @@
                  :November 11
                  :December 12})
 
+(defonce is_dnp :is_dnp)
+
 (defn- month-str->month-num [str]
   (months (keyword str)))
 
