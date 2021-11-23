@@ -10,6 +10,7 @@
             [query.attr.operation :refer [operations->-predicate
                                           resolve-operation
                                           get-operator
+                                          one-line-query-operators
                                           equality-operation?]]
             [query.util :refer [ref->ref-content
                                 filter-query-blocks
@@ -131,15 +132,23 @@
             refs (reduce #(if (not= % attr-ref)
                             (conj %1 %2)
                             %1) [] (map :db/id refs))
-            attr-values (extract-attr-values (str/trim (str/join "" (rest attr)))
-                                             attr-ref
-                                             refs)
-            operation [(get-operator :includes)
-                       attr-values]
-            input-refs (if (ref-equality-check? attr-values operation)
-                         refs
-                         nil)]
-        (eval-roam-attr-query current-blocks attr-ref [operation] input-refs)))))
+            input-content (str/trim (str/join "" (rest attr)))
+            input-lower (str/lower-case input-content)]
+        (if (contains? one-line-query-operators (keyword input-lower))
+          (eval-roam-attr-query current-blocks
+                                attr-ref
+                                [[(get-operator input-lower)
+                                  []]]
+                                [])
+          (let [attr-values (extract-attr-values input-content
+                                                 attr-ref
+                                                 refs)
+                operation [(get-operator :includes)
+                           attr-values]
+                input-refs (if (ref-equality-check? attr-values operation)
+                             refs
+                             nil)]
+            (eval-roam-attr-query current-blocks attr-ref [operation] input-refs)))))))
 
 (defn eval-reverse-roam-attr-query [current-blocks attr-ref input-ref]
   (let [results (->> (rd/q '[:find [?block ...]
@@ -249,15 +258,22 @@
             datomic-attr (extract-datomic-attr block-string)
             refs (mapv :db/id (:block/refs block))
             str-content (str/trim (str/replace block-string (str datomic-attr) ""))
-            attr-values (extract-attr-values str-content datomic-attr refs)
-            operation [(get-operator :includes)
-                       attr-values]
-            input-refs (if (ref-equality-check? attr-values operation)
-                         refs
-                         nil)]
-        (if (reverse-datomic-attr? datomic-attr)
-          (eval-reverse-datomic-attr-query current-blocks datomic-attr input-refs)
-          (eval-datomic-attr-query current-blocks datomic-attr [operation] input-refs))))))
+            str-lower (str/lower-case str-content)]
+        (if (contains? one-line-query-operators (keyword str-lower))
+          (eval-datomic-attr-query current-blocks
+                                   datomic-attr
+                                   [[(get-operator str-lower)
+                                     []]]
+                                   [])
+          (let [attr-values (extract-attr-values str-content datomic-attr refs)
+                operation [(get-operator :includes)
+                           attr-values]
+                input-refs (if (ref-equality-check? attr-values operation)
+                             refs
+                             nil)]
+            (if (reverse-datomic-attr? datomic-attr)
+              (eval-reverse-datomic-attr-query current-blocks datomic-attr input-refs)
+              (eval-datomic-attr-query current-blocks datomic-attr [operation] input-refs))))))))
 
 (defn attr-query? [block]
   (let [block-string (str/trim (block :block/string))]

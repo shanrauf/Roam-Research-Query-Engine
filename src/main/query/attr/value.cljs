@@ -10,6 +10,7 @@
 ; #[[Status]] | #Status | [[Status]] | (blockRef)
 (defonce roam-ref-regex #"#\[\[.+\]\]|#[^\s]*|\(\(([^()]+)\)\)|\[\[([^\[\]]+)\]\]")
 (defonce float-regex #"^\d+(\.\d+)?$")
+(defonce dnp-title-regex #"(January|February|March|April|May|June|July|August|September|October|November|December) [0-3]?[0-9](st|nd|rd|th), [0-9][0-9][0-9][0-9]")
 
 (defn- eid->title [eid]
   (ffirst (rd/q '[:find ?title
@@ -44,6 +45,9 @@
       (mapv #(identity [% ref-type]) refs)
       [[original-value text-type]])))
 
+; TODO A nested page tag is not parsed properly: [[Page [[A]]]] becomes 3 values, not 1
+; (low priority since practically, this barely affects query validity)
+;; TODO Should you allow an attribute's value to be the attribute itself? e.g. Type:: [[Type]]
 (defn extract-attr-values [input attribute input-refs]
   (let [value (str/trim input)
         ; Attribute is either a Roam attribute or a Datomic attribute

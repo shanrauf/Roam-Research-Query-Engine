@@ -2,9 +2,9 @@
   (:require [datascript.core :as d]
             [roam.test-graph]))
 
-(defonce schema (roam.test-graph/roam-graph :schema))
-(defonce datoms (reduce #(conj %1 (apply d/datom %2)) #{} (roam.test-graph/roam-graph :datoms)))
-(defonce db (d/conn-from-datoms datoms schema))
+(def schema (roam.test-graph/roam-graph :schema))
+(def datoms (reduce #(conj %1 (apply d/datom %2)) #{} (roam.test-graph/roam-graph :datoms)))
+(def db (d/conn-from-datoms datoms schema))
 
 ; NOTE: queries won't work without an :in clause for some reason
 (defn- add-db-to-args [args]

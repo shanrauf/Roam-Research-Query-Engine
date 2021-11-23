@@ -2,10 +2,12 @@
   (:require [clojure.string :as str]
             [clojure.set :as set]
             [roam.datascript :as rd]
-            [query.util :refer [branch? ref->ref-content]]
+            [query.util :refer [branch? ref->ref-content add-current-blocks-to-query]]
             [query.attr.core :refer [attr-query? attr-query]]
+            [query.attr.operation :refer [is_dnp]]
             [query.attr.value :refer [parse-attribute-ref-value
                                       ref-type
+                                      dnp-title-regex
                                       attr-value->type]]
             [query.roam-native :refer [roam-native-query? roam-native-query]]))
 
@@ -15,6 +17,23 @@
   (if (seq query-result)
     query-result
     []))
+
+(defn- dnp-filter-clause? [block-string]
+  (= (->
+      (str/trim block-string)
+      (str/lower-case)
+      (keyword))
+     is_dnp))
+
+(defn- eval-dnp-clause [blocks]
+  (rd/q (add-current-blocks-to-query
+         '[:find [?block ...]
+           :in $ ?dnp-title-regex
+           :where
+           [?block :node/title ?title]
+           [(re-matches ?dnp-title-regex ?title)]]
+         blocks)
+        dnp-title-regex blocks))
 
 (defn- generic-query-ref? [clause-block]
   (let [ref-count (count (:block/refs clause-block))
@@ -102,6 +121,10 @@
                   [])
 
                 :else (throw (js/Error. (str "Invalid branch: " str-lower))))
+
+          (dnp-filter-clause? block-string)
+          (eval-dnp-clause blocks)
+
           (attr-query? clause-block)
           (attr-query blocks clause-block)
 

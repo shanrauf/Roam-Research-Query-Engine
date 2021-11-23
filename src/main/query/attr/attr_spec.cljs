@@ -120,7 +120,7 @@
                                          [[(get-operator :>)
                                            [[2 num-type]]]]
                                          nil))
-              #{graph/task-3}))
+              #{}))
        (is (= (set (eval-roam-attr-query []
                                          graph/priority-attr
                                          [[(get-operator :<)

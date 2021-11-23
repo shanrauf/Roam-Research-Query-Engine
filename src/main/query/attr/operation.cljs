@@ -44,6 +44,15 @@
                (< % input-val))
             (mapv attr-value->value attr-values))))
 
+(defn- greater-than? [attr-values [input-attr-value]]
+  (if (= (attr-value->type input-attr-value) ref-type)
+    (let [input-date (attr-value->timestamp input-attr-value)
+          date-values (mapv attr-value->timestamp attr-values)]
+      (every? #(> % input-date) date-values))
+    (every? #(let [input-val (attr-value->value input-attr-value)]
+               (> % input-val))
+            (mapv attr-value->value attr-values))))
+
 (defn- less-than-or-equal? [attr-values [input-attr-value]]
   (if (= (attr-value->type input-attr-value) ref-type)
     (let [input-date (attr-value->timestamp input-attr-value)
@@ -51,6 +60,15 @@
       (every? #(<= % input-date) date-values))
     (every? #(let [input-val (attr-value->value input-attr-value)]
                (<= % input-val))
+            (mapv attr-value->value attr-values))))
+
+(defn- greater-than-or-equal? [attr-values [input-attr-value]]
+  (if (= (attr-value->type input-attr-value) ref-type)
+    (let [input-date (attr-value->timestamp input-attr-value)
+          date-values (mapv attr-value->timestamp attr-values)]
+      (every? #(>= % input-date) date-values))
+    (every? #(let [input-val (attr-value->value input-attr-value)]
+               (>= % input-val))
             (mapv attr-value->value attr-values))))
 
 (defn- is-dnp? [values _]
@@ -85,24 +103,35 @@
           :else (every? #(boolean (some #{%}
                                         values)) (map attr-value->value input-attr-values)))))
 
+; The fact that this function even executes means the attribute is not empty
+(defn- not-empty? []
+  true)
+
 (defn equality-operation? [operation]
   (let [op (first operation)]
     (or (= op equals?)
         (= op includes?))))
 
+(defonce is_dnp :is_dnp)
+
+(defonce one-line-query-operators
+  {is_dnp is-dnp?
+   :not_empty not-empty?})
+
 (defonce query-operators
-  {:= equals?
-   :!= (fn [values input-values]
-         (not (equals? values input-values)))
-   :< less-than?
-   :> (fn [values input-values]
-        (not (less-than-or-equal? values input-values)))
-   :<= less-than-or-equal?
-   :>= (fn [values input-values]
-         (not (less-than? values input-values)))
-   :is_dnp is-dnp?
-   :includes includes?
-   :contains includes?})
+  (merge one-line-query-operators
+         {:= equals?
+          :!= (fn [values input-values]
+                (not (equals? values input-values)))
+          ; NOTE: I can't define greater-than? as (not less-than?) because
+          ; I sometimes have to short-circuit false if the attribute values
+          ; aren't dates and the inverse approach will turn that false into a true
+          :< less-than?
+          :> greater-than?
+          :<= less-than-or-equal?
+          :>= greater-than-or-equal?
+          :includes includes?
+          :contains includes?}))
 
 (defn get-operator [op-name]
   (if (keyword? op-name)
@@ -110,15 +139,22 @@
     (get query-operators (keyword (str/lower-case op-name)))))
 
 (defn resolve-operation [attr-ref op-blocks]
-  (let [operator (-> (first (filter (comp #{0} :block/order) op-blocks))
-                     (:block/string)
-                     (str/trim)
-                     (remove-backticks)
-                     (get-operator))
-        input-block (first (filter (comp #{1} :block/order) op-blocks))
-        input-str (str/trim (:block/string input-block))
-        input-values (extract-attr-values input-str attr-ref (mapv :db/id (:block/refs input-block)))]
-    [operator input-values]))
+  (let [operator-str (-> (first (filter (comp #{0} :block/order) op-blocks))
+                         (:block/string)
+                         (str/trim)
+                         (str/lower-case)
+                         (remove-backticks))
+        operator (get-operator operator-str)]
+    (if (contains? one-line-query-operators (keyword operator-str))
+      [operator []]
+      (let [input-block (first (filter (comp #{1} :block/order) op-blocks))
+            input-str (str/trim (:block/string input-block))
+            input-values (if (contains? one-line-query-operators (keyword operator-str))
+                           []
+                           (extract-attr-values input-str
+                                                attr-ref
+                                                (mapv :db/id (:block/refs input-block))))]
+        [operator input-values]))))
 
 
 (defn- values-pass-operation? [attr-values operation]
