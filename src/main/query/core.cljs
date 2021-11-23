@@ -2,7 +2,7 @@
   (:require [clojure.string :as str]
             [clojure.set :as set]
             [roam.datascript :as rd]
-            [query.util :refer [is_dnp branch? add-current-blocks-to-query ref->ref-content]]
+            [query.util :refer [is_dnp generic-query-clause? get-query-uid branch? add-current-blocks-to-query ref->ref-content]]
             [query.attr.core :refer [attr-query? attr-query]]
             [query.attr.value :refer [parse-attribute-ref-value
                                       ref-type
@@ -43,33 +43,6 @@
     (if query-tree
       (eval-generic-query-clause blocks (add-implicit-and-clause query-tree))
       [])))
-
-(defn generic-query-attr? [block-string]
-  (str/starts-with? (str/trim block-string) "query::"))
-
-(defn generic-query-clause? [clause-block]
-  (let [ref-count (count (:block/refs clause-block))
-        block-string (:block/string clause-block)
-        ref (-> block-string
-                (str/trim)
-                (ref->ref-content))]
-    (and (= ref-count 1)
-         (or (generic-query-attr? block-string)
-             (seq (rd/q '[:find ?e
-                          :in $ ?ref
-                          :where
-                          [?e :block/uid ?ref]
-                          [?e :block/parents ?direct-parent]
-                          [?direct-parent :block/children ?e]
-                          [?query-attr :node/title "query"]
-                          [?direct-parent :attrs/lookup ?query-attr]]
-                        ref))))))
-
-
-(defn get-query-uid [block]
-  (if (generic-query-attr? (:block/string block))
-    (:block/uid block)
-    (:block/uid (first (:block/refs block)))))
 
 (defn- dnp-filter-clause? [block-string]
   (= (->
@@ -116,6 +89,10 @@
 
         children (->> (clause-block :block/children)
                       (sort-by :block/order))]
+    ; NOTE: The order of conditions matters a lot
+    ; e.g. a nested query clause `query::` could be read
+    ; as an attribute clause `query:: input_value`.
+    ; (shifting conditions around will break tests though so it's obvious)
     (cond (branch? str-lower)
           (cond (= str-lower "and")
                 (eval-generic-and-clause blocks children)
@@ -135,18 +112,18 @@
           (dnp-filter-clause? block-string)
           (eval-dnp-clause blocks)
 
+          (generic-query-clause? clause-block)
+          (let [query-uid (get-query-uid clause-block)]
+            (eval-generic-roam-query query-uid blocks))
+
           (attr-query? clause-block)
-          (attr-query blocks clause-block)
+          (attr-query blocks clause-block eval-generic-roam-query)
 
           (roam-native-query? block-string)
           (roam-native-query blocks block-string)
 
           (javascript-clause? block-string)
           (execute-javascript-clause block-string)
-
-          (generic-query-clause? clause-block)
-          (let [query-uid (get-query-uid clause-block)]
-            (eval-generic-roam-query query-uid blocks))
 
           (ref-list-clause? clause-block)
           (eval-ref-list-clause clause-block)

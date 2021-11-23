@@ -1,6 +1,6 @@
 (ns query.attr.operation
   (:require [clojure.string :as str]
-            [query.util :refer [remove-backticks is_dnp]]
+            [query.util :refer [remove-backticks is_dnp get-query-uid generic-query-clause?]]
             [query.attr.value :refer [ref-type
                                       num-type
                                       text-type
@@ -74,18 +74,18 @@
 (defn- is-dnp? [values _]
   (not (boolean (some js/isNaN (mapv attr-value->timestamp values)))))
 
-;; (defn- some-attr-values-satisfy-generic-clause-op [clause-block]
-;;   ; make sure all attr values are refs? or wrap i ntry catch if faster? idk
-;;   (fn [attr-values _]
-;;     (> (count (eval-generic-roam-query (get-query-uid clause-block)
-;;                                        (mapv attr-value->value attr-values)))
-;;        0)))
+(defn some-attr-values-satisfy-generic-clause-op [query-uid eval-generic-roam-query]
+  ; make sure all attr values are refs? or wrap i ntry catch if faster? idk
+  (fn [attr-values _]
+    (> (count (eval-generic-roam-query query-uid
+                                       (mapv attr-value->value attr-values)))
+       0)))
 
-;; (defn- all-attr-values-satisfy-generic-clause-op [clause-block]
-;;   (fn [attr-values _]
-;;     (= (count attr-values)
-;;        (count (eval-generic-roam-query (get-query-uid clause-block)
-;;                                        (mapv attr-value->value attr-values))))))
+(defn- all-attr-values-satisfy-generic-clause-op [query-uid eval-generic-roam-query]
+  (fn [attr-values _]
+    (= (count attr-values)
+       (count (eval-generic-roam-query query-uid
+                                       (mapv attr-value->value attr-values))))))
 
 (defn- input-regex? [input]
   (and (str/starts-with? input "/")
@@ -149,7 +149,7 @@
     (get query-operators op-name)
     (get query-operators (keyword (str/lower-case op-name)))))
 
-(defn resolve-operation [attr-ref op-blocks]
+(defn resolve-operation [attr-ref op-blocks eval-generic-roam-query]
   (let [operator-str (-> (first (filter (comp #{0} :block/order) op-blocks))
                          (:block/string)
                          (str/trim)
@@ -161,15 +161,13 @@
       (let [input-block (first (filter (comp #{1} :block/order) op-blocks))
             input-str (str/trim (:block/string input-block))]
         (if
-        ;;  (and (or (= operator includes?)
-        ;;              (= operator equals?))
-        ;;          (generic-query-clause? input-block))
-        ;;   [(if (= operator includes?)
-        ;;      (some-attr-values-satisfy-generic-clause-op input-block)
-        ;;      (all-attr-values-satisfy-generic-clause-op input-block))
-        ;;    []]
-         false
-          []
+         (and (or (= operator includes?)
+                  (= operator equals?))
+              (generic-query-clause? input-block))
+          [(if (= operator includes?)
+             (some-attr-values-satisfy-generic-clause-op (get-query-uid input-block) eval-generic-roam-query)
+             (all-attr-values-satisfy-generic-clause-op (get-query-uid input-block) eval-generic-roam-query))
+           []]
           [operator (if (contains? one-line-query-operators (keyword operator-str))
                       []
                       (extract-attr-values input-str

@@ -1,6 +1,7 @@
 (ns query.util
   (:require [clojure.string :as str]
-            [clojure.set :as set]))
+            [clojure.set :as set]
+            [roam.datascript :as rd]))
 
 (defonce branch-clauses ["and" "or" "not" "between"])
 (defn branch? [branch]
@@ -21,6 +22,15 @@
 
 (defonce is_dnp :is_dnp)
 
+(defn generic-query-attr? [block-string]
+  (str/starts-with? (str/trim block-string) "query::"))
+
+(defn get-query-uid [block]
+  (if (generic-query-attr? (:block/string block))
+    (:block/uid block)
+    (:block/uid (first (:block/refs block)))))
+
+
 (defn- month-str->month-num [str]
   (months (keyword str)))
 
@@ -29,6 +39,37 @@
 
 (defn ref->ref-content [ref]
   (subs ref 2 (- (count ref) 2)))
+
+(defn generic-query-ref? [uid]
+  (seq (rd/q '[:find ?e
+               :in $ ?ref
+               :where
+               [?e :block/uid ?ref]
+               [?e :block/parents ?direct-parent]
+               [?direct-parent :block/children ?e]
+               [?query-attr :node/title "query"]
+               [?direct-parent :attrs/lookup ?query-attr]]
+             uid)))
+
+(defn generic-query-eid? [eid]
+  (seq (rd/q '[:find ?e
+               :in $ ?e
+               :where
+               [?e :block/parents ?direct-parent]
+               [?direct-parent :block/children ?e]
+               [?query-attr :node/title "query"]
+               [?direct-parent :attrs/lookup ?query-attr]]
+             eid)))
+
+(defn generic-query-clause? [clause-block]
+  (let [ref-count (count (:block/refs clause-block))
+        block-string (:block/string clause-block)
+        ref (-> block-string
+                (str/trim)
+                (ref->ref-content))]
+    (and (= ref-count 1)
+         (or (generic-query-attr? block-string)
+             (generic-query-ref? ref)))))
 
 (defn dnp-title->date-str [title]
   (-> title
@@ -59,6 +100,10 @@
     (if (seq current-blocks)
       (vec-insert new-query (+ where-idx 2) '[(ground ?current-blocks) [?block ...]])
       new-query)))
+
+;; (defn remove-reserved-blocks-from-query [where-clauses]
+;;   (-> (filter-query-blocks)
+;;       (filter-table-column-specs)))
 
 (defn filter-query-blocks [where-clauses]
   (into where-clauses '[(not-join [?block]

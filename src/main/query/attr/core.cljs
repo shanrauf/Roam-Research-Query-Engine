@@ -11,6 +11,7 @@
                                           resolve-operation
                                           get-operator
                                           one-line-query-operators
+                                          some-attr-values-satisfy-generic-clause-op
                                           equality-operation?]]
             [query.util :refer [ref->ref-content
                                 filter-query-blocks
@@ -18,6 +19,7 @@
                                 datomic-attrs
                                 block-datomic-attrs
                                 text-datomic-attrs
+                                generic-query-eid?
                                 num-datomic-attrs
                                 reverse->block-datomic-attrs
                                 add-current-blocks-to-query]]))
@@ -111,13 +113,13 @@
                    ref-type) attr-values)
        (equality-operation? operation)))
 
-(defn roam-attr-query [current-blocks block]
+(defn roam-attr-query [current-blocks block eval-generic-roam-query]
   (let [refs (:block/refs block)
         children (->> (:block/children block)
                       (sort-by :block/order))]
     (if (seq children)
       (let [attr-ref (:db/id (first refs))
-            operation (resolve-operation attr-ref children)
+            operation (resolve-operation attr-ref children eval-generic-roam-query)
             attr-values (second operation)
             input-refs (if (ref-equality-check? attr-values operation)
                          (mapv attr-value->value attr-values)
@@ -129,7 +131,7 @@
       (let [attr (str/split (block :block/string) #"::")
             attr-title (first attr)
             attr-ref (:db/id (first (filter #(= (% :node/title) attr-title) refs)))
-            refs (reduce #(if (not= % attr-ref)
+            refs (reduce #(if (not= %2 attr-ref)
                             (conj %1 %2)
                             %1) [] (map :db/id refs))
             input-content (str/trim (str/join "" (rest attr)))
@@ -143,9 +145,15 @@
           (let [attr-values (extract-attr-values input-content
                                                  attr-ref
                                                  refs)
-                operation [(get-operator :includes)
-                           attr-values]
-                input-refs (if (ref-equality-check? attr-values operation)
+                first-ref (first refs)
+                is-generic-query-ref (generic-query-eid? first-ref)
+                operation (if is-generic-query-ref
+                            [(some-attr-values-satisfy-generic-clause-op (:block/uid first-ref) eval-generic-roam-query)
+                             []]
+                            [(get-operator :includes)
+                             attr-values])
+                input-refs (if (and (not is-generic-query-ref)
+                                    (ref-equality-check? attr-values operation))
                              refs
                              nil)]
             (eval-roam-attr-query current-blocks attr-ref [operation] input-refs)))))))
@@ -240,12 +248,12 @@
             (add-current-blocks-to-query current-blocks))
         (flip-datomic-attr datomic-attr) input-refs current-blocks))
 
-(defn datomic-attr-query [current-blocks block]
+(defn datomic-attr-query [current-blocks block eval-generic-roam-query]
   (let [children (->> (:block/children block)
                       (sort-by :block/order))
         datomic-attr (extract-datomic-attr (:block/string block))]
     (if (seq children)
-      (let [operation (resolve-operation datomic-attr children)
+      (let [operation (resolve-operation datomic-attr children eval-generic-roam-query)
             attr-values (second operation)
             input-refs (if (ref-equality-check? attr-values operation)
                          (map attr-value->value attr-values)
@@ -266,9 +274,15 @@
                                      []]]
                                    [])
           (let [attr-values (extract-attr-values str-content datomic-attr refs)
-                operation [(get-operator :includes)
-                           attr-values]
-                input-refs (if (ref-equality-check? attr-values operation)
+                first-ref (first refs)
+                is-generic-query-ref (generic-query-eid? first-ref)
+                operation (if is-generic-query-ref
+                            [(some-attr-values-satisfy-generic-clause-op (:block/uid first-ref) eval-generic-roam-query)
+                             []]
+                            [(get-operator :includes)
+                             attr-values])
+                input-refs (if (and (not is-generic-query-ref)
+                                    (ref-equality-check? attr-values operation))
                              refs
                              nil)]
             (if (reverse-datomic-attr? datomic-attr)
@@ -281,13 +295,13 @@
         (reverse-roam-attr-query? block-string)
         (datomic-attr-query? block))))
 
-(defn attr-query [current-blocks clause-block]
+(defn attr-query [current-blocks clause-block eval-generic-roam-query]
   (let [block-string (str/trim (clause-block :block/string))]
     (cond (roam-attr-query? block-string)
-          (roam-attr-query current-blocks clause-block)
+          (roam-attr-query current-blocks clause-block eval-generic-roam-query)
 
           (reverse-roam-attr-query? block-string)
           (reverse-roam-attr-query current-blocks clause-block)
 
           (datomic-attr-query? clause-block)
-          (datomic-attr-query current-blocks clause-block))))
+          (datomic-attr-query current-blocks clause-block eval-generic-roam-query))))
