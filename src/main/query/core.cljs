@@ -54,7 +54,7 @@
                blocks
                children)))
 
-; TODO: Roam code blocks break when there are backticks, and I can't escape them
+; NOTE: Roam code blocks break when there are backticks, and I can't escape them
 (defn- javascript-clause? [block-string]
   (str/includes? block-string "``javascript"))
 (defn- execute-javascript-clause [block-string]

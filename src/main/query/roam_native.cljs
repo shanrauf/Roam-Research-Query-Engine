@@ -77,7 +77,8 @@
         [start-date end-date] (sort [d1 d2])]
     (date-range->datalog start-date end-date [])))
 
-; TODO: Breaks page titles with curly braces e.g. [[Page {A}]]
+; NOTE: Breaks page titles with curly braces e.g. [[Page {A}]]
+; Idc to fix because Roam will expose parser eventually
 (defn- replace-braces-with-brackets [query-str]
   (-> query-str
       (str/replace "{" "[")

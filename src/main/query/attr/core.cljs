@@ -128,8 +128,9 @@
       (let [attr (str/split (block :block/string) #"::")
             attr-title (first attr)
             attr-ref (:db/id (first (filter #(= (% :node/title) attr-title) refs)))
-            ; TODO turn into one iteration with reduce
-            refs (filterv #(not= % attr-ref) (map :db/id refs))
+            refs (reduce #(if (not= % attr-ref)
+                            (conj %1 %2)
+                            %1) [] (map :db/id refs))
             attr-values (extract-attr-values (str/trim (str/join "" (rest attr)))
                                              attr-ref
                                              refs)
@@ -139,42 +140,6 @@
                          refs
                          nil)]
         (eval-roam-attr-query current-blocks attr-ref [operation] input-refs)))))
-
-;; (defn eval-ref-datomic-query [current-blocks ref datomic-attr]
-;;   (let [query (-> '[:find [?block ...]
-;;                     :in $ ?ref ?datomic-attr
-;;                     :where]
-;;                   (into (-> '[[?ref ?datomic-attr ?block]]
-;;                             (filter-query-blocks)))
-;;                   (add-current-blocks-to-query current-blocks))]
-;;     (rd/q query ref datomic-attr current-blocks)))
-
-;; (defn- ref-datomic-attr-query? [block]
-;;   (and (>= 1 (count (block :block/refs)))
-;;        (contains? block-datomic-attrs
-;;                   (-> (block :block/string)
-;;                       (str/trim)
-;;                       (str/split #" ")
-;;                       (last)
-;;                       (subs 1)
-;;                       (keyword)))))
-
-;; (defn- find-longest-ref [refs]
-;;   (reduce #(cond (= %1 nil) %1
-;;                  (> (count (%2 :node/title))
-;;                     (count (%1 :node/title))) %2
-;;                  :else %1) nil refs))
-
-;; (defn- ref-datomic-query [current-blocks block]
-;;   ; A hack to retrieve [[Test [[A]]]] instead of [[A]]
-;;   ; TODO would it be faster/cleaner to just use ref-length?
-;;   (let [block-refs (:block/refs block)
-;;         ref (-> (if (= 1 (count block-refs))
-;;                   (first block-refs)
-;;                   (find-longest-ref block-refs))
-;;                 (:db/id))
-;;         datomic-attr (extract-datomic-attr (block :block/string))]
-;;     (eval-ref-datomic-query current-blocks ref datomic-attr)))
 
 (defn eval-reverse-roam-attr-query [current-blocks attr-ref input-ref]
   (let [results (->> (rd/q '[:find [?block ...]
@@ -282,7 +247,6 @@
                                  input-refs))
       (let [block-string (:block/string block)
             datomic-attr (extract-datomic-attr block-string)
-            ; TODO turn into one iteration with reduce
             refs (mapv :db/id (:block/refs block))
             str-content (str/trim (str/replace block-string (str datomic-attr) ""))
             attr-values (extract-attr-values str-content datomic-attr refs)

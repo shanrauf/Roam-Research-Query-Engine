@@ -82,7 +82,8 @@
     (subs block-string 1 (- (count block-string) 1))
     block-string))
 
-; TODO: breaks with unbalanced brackets e.g. [[Page [ ABC]]
+; NOTE: breaks with unbalanced brackets e.g. [[Page [ ABC]]
+; Idc to fix because Roam will expose parser eventually
 (defn ref-length
   "Walk through a page ref & return its length"
   ([expr] (ref-length (rest (str/split expr #"")) 0 0))
@@ -132,7 +133,7 @@
                :edit/seen-by
                :edit/user}))
 
-; TODO Missing :block/open because I don't have a boolean type right now.
+; NOTE: Missing :block/open because I don't have a boolean type right now.
 (defonce datomic-attrs
   (set/union text-datomic-attrs
              num-datomic-attrs

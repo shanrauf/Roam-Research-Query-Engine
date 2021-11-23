@@ -44,14 +44,14 @@
 ;;         (list 'js-debugger)
 ;;         form))
 
-; TODO I have to import tufte in my root file because this is dynamically generating code.
+; NOTE: I have to import tufte in my root file because this is dynamically generating code.
 ;; But can't I "resolve" those tufte functions here???
 ;;; idrc though, I often have to import the library anyway for adding defnp/p in my codebase
 (defmacro perf [& forms]
   ;; (refer 'taoensso.tufte :only '[p profiled format-pstats])
   (let [first-form (first forms)
         functions (for [func (rest forms)]
-                    ; TODO append func name with index
+                    ; TODO append func name with actual index instead of rand-int
                     `(taoensso.tufte/p (keyword (str (name (first '~func)) "-" (rand-int 100000))) ~func))
         settings (if (empty? first-form)
                    ; Default settings
