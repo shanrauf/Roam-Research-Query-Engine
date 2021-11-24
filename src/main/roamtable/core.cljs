@@ -70,45 +70,32 @@
 (defonce reverse-roam-attr-spec :reverse-roam-attr)
 (defonce datomic-attr-spec :datomic-attr)
 
+(defn- extract-column-spec [spec block]
+  (let [block-string (-> (:block/string block)
+                         (str/trim))
+        ref (:block/refs block)
+        ref-title (:node/title ref)
+        ref-id (:db/id ref)
+        col-id (keyword (str "col-" (first spec)))
+        children (:block/children block)]
+    (cond (roam-attr? block-string)
+          [col-id ref-title roam-attr-spec ref-id]
+
+          (reverse-roam-attr-query? block-string)
+          [col-id ref-title reverse-roam-attr-spec ref-id]
+
+          (datomic-attr? (keyword-str->keyword block-string))
+          (let [datomic-attr (keyword-str->keyword block-string)]
+            [col-id
+             (datomic-attr->col-name datomic-attr)
+             datomic-attr-spec
+             datomic-attr])
+          :else (if (seq children)
+                  (extract-column-spec spec (first children))
+                  (throw (js/Error. "Invalid column spec"))))))
 
 (defn- columns->columns-spec [columns]
-  (reduce #(let [block-string (-> (:block/string %2)
-                                  (str/trim))
-                 ref (:block/refs %2)
-                 ref-title (:node/title ref)
-                 ref-id (:db/id ref)
-                 col-id (keyword (str "col-" (first %1)))]
-             (cond (roam-attr? block-string)
-                   [col-id ref-title roam-attr-spec ref-id]
-
-                   (reverse-roam-attr-query? block-string)
-                   [col-id ref-title reverse-roam-attr-spec ref-id]
-
-                   (datomic-attr? (keyword-str->keyword block-string))
-                   (let [datomic-attr (keyword-str->keyword block-string)]
-                     [col-id
-                      (datomic-attr->col-name datomic-attr)
-                      datomic-attr-spec
-                      datomic-attr])
-
-                   :else (let [child (first (:block/children %2))
-                               child-str (:block/string child)
-                               child-ref (:block/refs child)
-                               child-ref-title (:node/title child-ref)
-                               child-ref-id (:db/id child-ref)]
-                           (cond (roam-attr? child-str)
-                                 [col-id child-ref-title roam-attr-spec child-ref-id]
-                                 (reverse-roam-attr-query? child-str)
-                                 [col-id child-ref-title reverse-roam-attr-spec child-ref-id]
-
-                                 (datomic-attr? (keyword-str->keyword child-str))
-                                 (let [datomic-attr (keyword-str->keyword child-str)]
-                                   [col-id
-                                    (datomic-attr->col-name datomic-attr)
-                                    datomic-attr-spec
-                                    datomic-attr])
-
-                                 :else (throw (js/Error. "Unknown column spec")))))) [1 []] columns))
+  (reduce #(extract-column-spec %1 %2) [1 []] columns))
 
 (defn- columns-spec->column-headers [spec]
   (map first spec))

@@ -47,17 +47,16 @@
 ; NOTE: I have to import tufte in my root file because this is dynamically generating code.
 ;; But can't I "resolve" those tufte functions here???
 ;;; idrc though, I often have to import the library anyway for adding defnp/p in my codebase
-(defmacro perf [& forms]
+(defmacro perf [settings & forms]
   ;; (refer 'taoensso.tufte :only '[p profiled format-pstats])
-  (let [first-form (first forms)
-        functions (for [func (rest forms)]
+  (let [functions (for [func (rest forms)]
                     ; TODO append func name with actual index instead of rand-int
                     `(taoensso.tufte/p (keyword (str (name (first '~func)) "-" (rand-int 100000))) ~func))
-        settings (if (empty? first-form)
+        settings (if (empty? settings)
                    ; Default settings
                    ;; repeat is a custom property to repeat all top lvl functions
                    {:repeat 1}
-                   first-form)]
+                   settings)]
     `(do (js/console.log "Profiling...")
          (let [[_# pstats#] (taoensso.tufte/profiled
                              ~settings

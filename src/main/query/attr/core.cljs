@@ -1,6 +1,7 @@
 (ns query.attr.core
   (:require [roam.datascript :as rd]
             [clojure.string :as str]
+            [datascript.core]
             [query.attr.value :refer [ref-type
                                       text-type
                                       num-type
@@ -45,32 +46,28 @@
 (defn- eid->block-refs [eid]
   (mapv :db/id (get (rd/entity eid) :block/refs)))
 
+(defn- parse-one-line-attr [attr-str]
+  (let [idx (str/index-of attr-str "::")]
+    (str/trim (subs attr-str (+ idx 2)))))
+
 (def attr-values-rule
-  '[(attr-values ?block ?attr-ref ?v ?is-single-value ?extract-attr-values ?eid->block-refs)
+  '[(attr-values ?block ?attr-ref ?v ?is-single-value ?parse-one-line-attr ?extract-attr-values ?eid->block-refs)
     [?block :attrs/lookup ?attr-block]
     [?attr-block :block/refs ?attr-ref]
     [?attr-block :block/string ?attr-string]
+    [(?is-single-value ?attr-string) ?single-value]
     (or-join
-     [?attr-block ?attr-ref ?v ?attr-string ?is-single-value ?extract-attr-values ?eid->block-refs]
+     [?attr-block ?attr-ref ?v ?attr-string ?single-value ?parse-one-line-attr ?extract-attr-values ?eid->block-refs]
      ; One-liner attribute
-     (and [(?is-single-value ?attr-string)]
-          [?attr-block :block/string ?v]
-          ; Hacky parsing to isolate value
-          [?attr-ref :node/title ?attr-title]
-          [?attr-block :block/string ?str]
-          [(str ?attr-title "::") ?roam-attr]
-          [(clojure.string/starts-with? ?str ?roam-attr)]
-          [(count ?attr-title) ?attr-title-len]
-          [(+ ?attr-title-len 2) ?roam-attr-len-no-space]
-          [(subs ?v ?roam-attr-len-no-space) ?v]
-          [(subs ?v 0 1) ?first-char]
-          (or [(!= ?first-char " ")]
-              [(subs ?v 1) ?v])
+     (and [(true? ?single-value)]
+          [(?parse-one-line-attr ?attr-string) ?v]
           [(?eid->block-refs ?attr-block) ?refs]
           [(?extract-attr-values ?v ?attr-ref ?refs) ?v]
+          ; TODO is this redundant and/or if i got rid of this, could i
+          ; get rid of the identity aggregate?
           [(ground ?v) [?v ...]])
      ; Multi-value attribute
-     (and (not [(?is-single-value ?attr-string)])
+     (and (not [(true? ?single-value)])
           [?attr-block :block/children ?children]
           [?children :block/string ?v]
           ; Ignore empty blocks (even though Roam adds them to :attrs/lookup last I checked)
@@ -96,15 +93,15 @@
                            [?block :attrs/lookup ?input-ref]]
                          [])
         query (-> '[:find ?block (aggregate ?identity ?v)
-                    :in $ % ?attribute ?extract-attr-values ?identity ?is-single-value ?input-refs ?eid->block-refs
+                    :in $ % ?attribute ?parse-one-line-attr ?extract-attr-values ?identity ?is-single-value ?input-refs ?eid->block-refs
                     :where]
                   (into (-> '[[?block :attrs/lookup ?attribute]]
                             (into lookup-clauses)
-                            (into '[(attr-values ?block ?attribute ?v ?is-single-value ?extract-attr-values ?eid->block-refs)])
+                            (into '[(attr-values ?block ?attribute ?v ?is-single-value ?parse-one-line-attr ?extract-attr-values ?eid->block-refs)])
                             (filter-query-blocks)))
                   (add-current-blocks-to-query current-blocks))]
     (->> (rd/q query
-               [attr-values-rule] attribute extract-attr-values identity-aggregate single-value-attr? input-refs eid->block-refs current-blocks)
+               [attr-values-rule] attribute parse-one-line-attr extract-attr-values identity-aggregate single-value-attr? input-refs eid->block-refs current-blocks)
          (filter #(operations-pred (second %)))
          (mapv first))))
 
@@ -160,13 +157,14 @@
 
 (defn eval-reverse-roam-attr-query [current-blocks attr-ref input-ref]
   (let [results (->> (rd/q '[:find [?block ...]
-                             :in $ ?attr-ref ?input-ref ?extract-attr-values % ?is-single-value ?eid->block-refs
+                             :in $ ?attr-ref ?input-ref ?extract-attr-values % ?parse-one-line-attr ?is-single-value ?eid->block-refs
                              :where
-                             (attr-values ?input-ref ?attr-ref ?block ?is-single-value ?extract-attr-values ?eid->block-refs)]
+                             (attr-values ?input-ref ?attr-ref ?block ?is-single-value ?parse-one-line-attr ?extract-attr-values ?eid->block-refs)]
                            attr-ref
                            input-ref
                            extract-attr-values
                            [attr-values-rule]
+                           parse-one-line-attr
                            single-value-attr?
                            eid->block-refs)
                      (reduce #(if (= (attr-value->type %2) ref-type)

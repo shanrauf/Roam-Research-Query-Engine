@@ -1,6 +1,7 @@
 .clj-kondo
 .lsp
 .calva
+public/srauf.edn
 
 node_modules/
 public/js

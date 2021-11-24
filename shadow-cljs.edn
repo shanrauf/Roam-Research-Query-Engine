@@ -6,7 +6,8 @@
   [org.clojure/clojurescript "1.10.866"]
   [reagent "0.10.0"]
   [datascript "1.2.8"]
-  [com.taoensso/tufte "2.2.0"]]
+  [com.taoensso/tufte "2.2.0"]
+  [cljs-http "0.1.46"]]
  :dev-http {8080 "public"}
  :builds
  {:frontend

@@ -2,7 +2,7 @@
   (:require [clojure.string :as str]
             [clojure.set :as set]
             [roam.datascript :as rd]
-            [query.util :refer [is_dnp generic-query-clause? get-query-uid branch? add-current-blocks-to-query ref->ref-content]]
+            [query.util :refer [is_dnp generic-query-clause? get-query-uid branch? add-current-blocks-to-query]]
             [query.attr.core :refer [attr-query? attr-query]]
             [query.attr.value :refer [parse-attribute-ref-value
                                       ref-type
