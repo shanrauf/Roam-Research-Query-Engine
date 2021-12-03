@@ -1,0 +1,61 @@
+(ns roam.test-graph)
+
+(defonce october-26-2021 68)
+(defonce october-28-2021 178)
+(defonce october-31-2021 209)
+(defonce nov-1-2021 231)
+(defonce nov-3-2021 276)
+
+(defonce testing-page 40)
+
+(defonce type-attr 58)
+(defonce todos-attr 280)
+(defonce task-type 57)
+(defonce deadline-attr 60)
+(defonce priority-attr 233)
+(defonce description-attr 237)
+(defonce status-attr 63)
+
+(defonce generic-query-1-uid "V_RJJffGT")
+(defonce generic-query-2-uid "cHdjj4_5e")
+(defonce generic-query-3-uid "Q2B15aDEe")
+(defonce generic-query-4-uid "Eix_cBMsf")
+(defonce generic-query-5-uid "vF7_YcdjK")
+(defonce generic-query-6-uid "1oj2ynMev")
+(defonce generic-query-7-uid "LVgdmiSpH")
+(defonce generic-query-8-uid "9YlKStGcH")
+(defonce generic-query-9-uid "2FTE-XYQ8")
+(defonce generic-query-10-uid "T9vtzczHF")
+(defonce generic-query-11-uid "5aQ-ExaEa")
+(defonce generic-query-12-uid "MDnG5t5Xa")
+(defonce generic-query-13-uid "lAbab6a1L")
+(defonce generic-query-14-uid "FrZXSiQjg")
+(defonce generic-query-15-uid "TH0Ezu6Sh")
+(defonce generic-query-16-uid "cTpI8d_qz")
+(defonce generic-query-17-uid "qnSIcmScN")
+(defonce generic-query-18-uid "jCf7IjWeF")
+(defonce generic-query-19-uid "_oZkisf1o")
+(defonce generic-query-20-uid "HKKvp3FSi")
+(defonce generic-query-21-uid "_Jp98zifE")
+(defonce generic-query-22-uid "Rxt94IWDH")
+(defonce generic-query-23-uid "f7W10cY6N")
+(defonce generic-query-24-uid "IGAM1zC6a")
+(defonce generic-query-25-uid "gUDzXuGfL")
+(defonce generic-query-26-uid "ZtcKqBy3s")
+(defonce generic-query-27-uid "IB8hPhhCu")
+(defonce generic-query-28-uid "r-bE0UvRK")
+(defonce generic-query-29-uid "MTQeoVort")
+(defonce generic-query-30-uid "IwjNbMWbk")
+
+
+; Status
+(defonce in-progress 62)
+(defonce completed 188)
+
+(defonce test-block-0 {:db/id 226
+                       :block/parents [211 testing-page]
+                       :block/children [227]})
+
+(defonce task-1 48)
+(defonce task-2 64)
+(defonce task-3 189)

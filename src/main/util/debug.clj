@@ -1,5 +1,4 @@
-(ns util.debug
-  (:require [taoensso.tufte :as tufte]))
+(ns util.debug)
 
 (defmacro defntraced
   [sym & body]
@@ -38,30 +37,30 @@
     `(do (js/console.log ~form)
          ~form)))
 
-; This doesn't work well with Clojurescript + source maps + debugging
+; TODO: This doesn't work well with Clojurescript + source maps + debugging
 ;; (defmacro debug [form]
 ;;   (list 'do
 ;;         (list 'js-debugger)
 ;;         form))
 
-; NOTE: I have to import tufte in my root file because this is dynamically generating code.
-;; But can't I "resolve" those tufte functions here???
-;;; idrc though, I often have to import the library anyway for adding defnp/p in my codebase
+; TODO: I have to import tufte in my root file because this is dynamically generating code.
+; But can't I "resolve" those tufte functions here??? I tried and can't because
+; "You can't take the value of a macro"
+; This doesn't even work anyway - repeat > 1 doesn't properly "combine" the same functions and idk why
 (defmacro perf [settings & forms]
-  ;; (refer 'taoensso.tufte :only '[p profiled format-pstats])
-  (let [functions (for [func (rest forms)]
+  (let [functions (for [func forms]
                     ; TODO append func name with actual index instead of rand-int
                     `(taoensso.tufte/p (keyword (str (name (first '~func)) "-" (rand-int 100000))) ~func))
         settings (if (empty? settings)
                    ; Default settings
                    ;; repeat is a custom property to repeat all top lvl functions
-                   {:repeat 1}
+                   {:repeat 10}
                    settings)]
     `(do (js/console.log "Profiling...")
          (let [[_# pstats#] (taoensso.tufte/profiled
                              ~settings
-                             (dotimes [_# (or (:repeat ~settings) 1)]
+                             (dotimes [_# (:repeat ~settings)]
                                ~@functions))]
-           (js/console.log "%cProfiling results:", "color: green; font-weight: bold;")
+           (js/console.log "%cResults:", "color: green; font-size: 20px; font-weight: bold;")
            (js/console.log (taoensso.tufte/format-pstats pstats# {:columns [:n-calls :min :p50 :p90 :p99 :max :mean :mad :clock :total]
                                                                   :sort-fn (fn [m#] (get m# :sum))}))))))

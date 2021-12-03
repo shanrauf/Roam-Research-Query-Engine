@@ -17,7 +17,7 @@
     query-result
     []))
 
-(defn- uid->block-children [uid]
+(defn- get-children [uid]
   (let [result (rd/q '[:find (pull ?children [:db/id :block/order :block/uid :node/title :block/string {:block/refs 2} {:block/children ...}])
                        :in $ ?query-uid
                        :where
@@ -38,7 +38,7 @@
                children)))
 
 (defn- eval-generic-roam-query [query-uid blocks]
-  (let [query-tree (->> (uid->block-children query-uid)
+  (let [query-tree (->> (get-children query-uid)
                         (map first))]
     (if query-tree
       (eval-generic-query-clause blocks (add-implicit-and-clause query-tree))
@@ -113,8 +113,7 @@
           (eval-dnp-clause blocks)
 
           (generic-query-clause? clause-block)
-          (let [query-uid (get-query-uid clause-block)]
-            (eval-generic-roam-query query-uid blocks))
+          (eval-generic-roam-query (get-query-uid clause-block) blocks)
 
           (attr-query? clause-block)
           (attr-query blocks clause-block eval-generic-roam-query)
@@ -134,6 +133,16 @@
   (eval-generic-roam-query query-uid []))
 
 #_:clj-kondo/ignore
-(defn init []
-  (println "Generic roam queries"))
+(defn ^:dev/after-load start []
+  (js/console.log "Reloaded:"))
 
+#_:clj-kondo/ignore
+(defn ^:dev/before-load stop []
+  (js/console.log "Reloading..."))
+
+#_:clj-kondo/ignore
+(defn init []
+  (js/console.log "Initializing DB... (avoid hot reloading or running functions that rely on it for a few seconds)")
+  (-> (rd/init-db+)
+      (.then #(js/console.log "Generic roam queries"))
+      (.catch #(js/console.error "Error initializing DB: " %))))

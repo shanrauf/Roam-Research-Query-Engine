@@ -8,6 +8,7 @@
                                       attr-value->timestamp
                                       attr-value->value
                                       attr-value->type]]))
+
 (defn- equals?
   "Check equality (complex procedure because we account for
    duplicates and values of different types)"
@@ -161,10 +162,12 @@
       (let [input-block (first (filter (comp #{1} :block/order) op-blocks))
             input-str (str/trim (:block/string input-block))]
         (if
-         (and (or (= operator includes?)
-                  (= operator equals?))
+        ; TODO: roam/render doesn't work with function equality
+         ; e.g. (= operator includes?)
+         (and (or (= operator-str "includes")
+                  (= operator-str "="))
               (generic-query-clause? input-block))
-          [(if (= operator includes?)
+          [(if (= operator-str "includes")
              (some-attr-values-satisfy-generic-clause-op (get-query-uid input-block) eval-generic-roam-query)
              (all-attr-values-satisfy-generic-clause-op (get-query-uid input-block) eval-generic-roam-query))
            []]
@@ -182,8 +185,7 @@
 (defn passes-operations? [attr-values operations]
   (every? #(values-pass-operation? attr-values %) operations))
 
-
-(defn operations->-predicate [operations]
-  (fn [values] (if (> (count operations) 0)
-                 (passes-operations? values operations)
-                 true)))
+(defn filter-by-operations [operations block-vals-pairs]
+  (if (= (count operations) 0)
+    block-vals-pairs
+    (filter #(passes-operations? (second %) operations) block-vals-pairs)))

@@ -7,7 +7,8 @@
   [reagent "0.10.0"]
   [datascript "1.2.8"]
   [com.taoensso/tufte "2.2.0"]
-  [cljs-http "0.1.46"]]
+  [cljs-http "0.1.46"]
+  [binaryage/devtools "1.0.4"]]
  :dev-http {8080 "public"}
  :builds
  {:frontend
@@ -15,11 +16,11 @@
    :modules {:main {:init-fn roamtable.core/init}}}
   :query-browser
   {:target :browser
-   :compiler-options {:source-map true
-                      :source-map-include-sources-content true}
+   :preloads [binaryage/devtools]
    :modules {:main {:init-fn query.core/init}}}
   :test
   {:target    :node-test
    :output-to "out/node-tests.js"
    :ns-regexp "-spec$"
+   :main query.test-runner/main
    :autorun   true}}}
