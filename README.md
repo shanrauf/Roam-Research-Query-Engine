@@ -9,6 +9,3 @@ A Roam Research plugin to enable non-technical users to compose complex queries 
 ## Development
 1. `npx shadow-cljs watch frontend` or `npx shadow-cljs watch test`
 2. If you're using Calva, press Ctrl + Shift + P and select Jack-in, then select the `test` and `query-browser` builds, and then when prompted later, select `query-browser` to plug the REPL into. (`test` auto-runs tests, and query-browser is to have the REPL and browser debugger working)
-
-
-<div style="position: relative; padding-bottom: 56.25%; height: 0;"><iframe src="https://www.loom.com/embed/192b7c22761845f7a0ba93a6434c2569?sid=ee8acdd3-67f0-4349-b55e-7275f5ca2586" frameborder="0" webkitallowfullscreen mozallowfullscreen allowfullscreen style="position: absolute; top: 0; left: 0; width: 100%; height: 100%;"></iframe></div>
